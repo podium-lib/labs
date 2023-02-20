@@ -20,5 +20,8 @@
   "bugs": {
     "url": "https://github.com/podium-lib/labs/issues"
   },
-  "homepage": "https://github.com/podium-lib/labs#readme"
+  "homepage": "https://github.com/podium-lib/labs#readme",
+  "publishConfig": {
+    "access": "public"
+  }
 }
