@@ -1,0 +1,16 @@
+{
+    "files": [
+      {
+        "path": "./dist/client/content.js",
+        "maxSize": "25 kB"
+      },
+      {
+        "path": "./dist/client/fallback.js",
+        "maxSize": "10 kB"
+      },
+      {
+        "path": "./dist/dsd-polyfill.js",
+        "maxSize": "10 kB"
+      }
+    ]
+  }

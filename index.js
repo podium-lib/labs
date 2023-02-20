@@ -1,0 +1,1 @@
+export { fastifyPodletPlugin } from '@podium/experimental-fastify-podlet-plugin';

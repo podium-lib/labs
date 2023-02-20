@@ -1,0 +1,23 @@
+{
+  "name": "@podium/labs",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "npx bundlesize"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "workspaces": [
+    "packages/build",
+    "packages/fastify-podlet-plugin",
+    "packages/config-schema",
+    "packages/lit-base-class"
+  ],
+  "devDependencies": {
+    "bundlesize": "^0.18.1"
+  },
+  "dependencies": {}
+}

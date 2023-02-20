@@ -1,0 +1,29 @@
+{
+  "name": "@podium/experimental-podlet-build",
+  "version": "0.0.1",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "podlet-dev": "./dev.js",
+    "podlet-start": "./start.js",
+    "podlet-build": "./build.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git@github.schibsted.io:richard-walker/nmp-podlet-design.git"
+  },
+  "description": "",
+  "dependencies": {
+    "@fastify/restartable": "^1.4.0",
+    "chokidar": "^3.5.3",
+    "esbuild": "^0.17.6",
+    "esbuild-plugin-minify-html-literals": "^1.0.2",
+    "fastify-sandbox": "^0.11.0"
+  }
+}

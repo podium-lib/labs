@@ -1,0 +1,36 @@
+{
+  "name": "@podium/experimental-fastify-podlet-plugin",
+  "version": "0.0.1",
+  "main": "index.js",
+  "type": "module",
+  "exports": "./index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git@github.schibsted.io:richard-walker/nmp-podlet-design.git"
+  },
+  "description": "",
+  "dependencies": {
+    "@eik/node-client": "^1.1.41",
+    "@fastify/compress": "^6.2.0",
+    "@fastify/static": "^6.9.0",
+    "@finn-no/express-user-token-middleware": "^5.9.4",
+    "@finn-no/process-exception-handlers": "^3.1.2",
+    "@lit-labs/ssr": "^3.0.1",
+    "@podium/fastify-podlet": "^3.0.0-next.3",
+    "@podium/podlet": "^5.0.0-next.6",
+    "convict": "^6.2.4",
+    "fastify-metrics-js-prometheus": "^4.0.0",
+    "fastify-metrics-js-response-timing": "^3.0.0",
+    "fastify-plugin": "^4.5.0",
+    "lit": "^2.6.1",
+    "pino": "^8.10.0",
+    "pino-pretty": "^9.2.0",
+    "prom-client": "^14.1.1"
+  }
+}
