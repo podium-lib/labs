@@ -19,7 +19,7 @@
     "@eik/node-client": "^1.1.41",
     "@fastify/compress": "^6.2.0",
     "@fastify/static": "^6.9.0",
-    "@podium/experimental-process-exception-handlers": "^3.1.2",
+    "@podium/experimental-process-exception-handlers": "^0.0.1",
     "@lit-labs/ssr": "^3.0.1",
     "@podium/fastify-podlet": "^3.0.0-next.3",
     "@podium/podlet": "^5.0.0-next.6",
