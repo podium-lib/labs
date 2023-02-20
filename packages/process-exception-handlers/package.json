@@ -1,0 +1,56 @@
+{
+    "name": "@podium/experimental-process-exception-handlers",
+    "version": "0.0.1",
+    "description": "Generic process exception handing for node",
+    "main": "lib/index.js",
+    "files": [
+        "lib/"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git@github.schibsted.io:finn/process-exception-handlers.git"
+    },
+    "scripts": {
+        "lint": "eslint .",
+        "test": "jest .",
+        "precommit": "lint-staged"
+    },
+    "author": "Trygve Lie",
+    "license": "Unlicensed",
+    "publishConfig": {
+        "registry": "https://npm.finntech.no/"
+    },
+    "devDependencies": {
+        "eslint": "6.8.0",
+        "eslint-config-airbnb-base": "14.0.0",
+        "eslint-config-prettier": "6.10.0",
+        "eslint-plugin-import": "2.20.0",
+        "eslint-plugin-prettier": "3.1.2",
+        "freshy": "1.0.4",
+        "husky": "4.2.1",
+        "jest": "25.1.0",
+        "lint-staged": "10.0.4",
+        "prettier": "1.19.1"
+    },
+    "lint-staged": {
+        "*.js": [
+            "eslint --fix",
+            "git add"
+        ],
+        "*.{json,md,yml}": [
+            "prettier --write",
+            "git add"
+        ],
+        ".eslintrc": [
+            "prettier --write",
+            "git add"
+        ]
+    },
+    "dependencies": {
+        "@metrics/client": "^2.5.0",
+        "abslog": "^2.4.0"
+    },
+    "jest": {
+        "testEnvironment": "node"
+    }
+}

@@ -14,7 +14,7 @@ import fp from "fastify-plugin";
 // @ts-ignore
 import ResponseTiming from "fastify-metrics-js-response-timing";
 // @ts-ignore
-import ProcessExceptionHandlers from "@finn-no/process-exception-handlers";
+import ProcessExceptionHandlers from "@podium/experimental-process-exception-handlers";
 
 /**
  * TODO:

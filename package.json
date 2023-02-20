@@ -14,7 +14,8 @@
     "packages/build",
     "packages/fastify-podlet-plugin",
     "packages/config-schema",
-    "packages/lit-base-class"
+    "packages/lit-base-class",
+    "packages/process-exception-handlers"
   ],
   "devDependencies": {
     "bundlesize": "^0.18.1"
