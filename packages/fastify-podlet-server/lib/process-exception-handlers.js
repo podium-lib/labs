@@ -1,7 +1,5 @@
 import assert from 'node:assert';
-// @ts-ignore
 import abslog from 'abslog';
-// @ts-ignore
 import Metrics from '@metrics/client';
 
 const timeout = Symbol('timeout');

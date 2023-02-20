@@ -1,20 +1,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import Podlet from "@podium/podlet";
-// import compress from '@fastify/compress';
-// @ts-ignore
-import fastifyPodletPlugin from "@podium/fastify-podlet";
-import { render as ssr } from "@lit-labs/ssr";
+import ResponseTiming from "fastify-metrics-js-response-timing";
+import fp from "fastify-plugin";
 import { html } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { fastifyStatic } from "@fastify/static";
-// @ts-ignore
 import EikClient from "@eik/node-client";
-import fp from "fastify-plugin";
-// @ts-ignore
-import ResponseTiming from "fastify-metrics-js-response-timing";
-// @ts-ignore
-import ProcessExceptionHandlers from "@podium/experimental-process-exception-handlers";
+import { fastifyStatic } from "@fastify/static";
+import { render as ssr } from "@lit-labs/ssr";
+import Podlet from "@podium/podlet";
+import fastifyPodletPlugin from "@podium/fastify-podlet";
+import ProcessExceptionHandlers from "./process-exception-handlers.js";
 
 /**
  * TODO:

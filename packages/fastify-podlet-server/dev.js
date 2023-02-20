@@ -88,6 +88,7 @@ if (config.get("app.development")) {
     // after building the server, we need to reload the server before we can build the client
     // otherwise it will trigger a SSE to the browser too early.
     // all in all though, this is still quick which is impressive given the need for a server restart
+    await mkTempDirs({ logger });
     await buildServer({ context: serverBuildContext, name: config.get("app.name"), logger });
     await restart();
     await buildClient({

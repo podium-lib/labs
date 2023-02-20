@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { readFileSync, writeFileSync, mkdirSync, existsSync, rmdirSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { build, transform } from "esbuild";
 import { start } from "@fastify/restartable";
@@ -97,7 +97,7 @@ export async function startServer({
   const started = await start({
     logger,
     app: (app, opts, done) => {
-      const pluginPath = require.resolve("@podium/experimental-fastify-podlet-plugin");
+      const pluginPath = require.resolve("./lib/fastify-podlet-plugin.js");
       // register podium plugin using sandbox to enable reloading
       app.register(sandbox, {
         path: pluginPath,

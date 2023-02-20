@@ -11,14 +11,10 @@
   "author": "",
   "license": "ISC",
   "workspaces": [
-    "packages/build",
-    "packages/fastify-podlet-plugin",
-    "packages/config-schema",
-    "packages/lit-base-class",
-    "packages/process-exception-handlers"
+    "packages/fastify-podlet-server",
+    "packages/lit-base-class"
   ],
   "devDependencies": {
     "bundlesize": "^0.18.1"
-  },
-  "dependencies": {}
+  }
 }
