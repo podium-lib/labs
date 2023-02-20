@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import convict from "convict";
-import { schema, formats } from "@nmp/config-schema";
+import { schema, formats } from "@podium/experimental-config-schema";
 
 convict.addFormats(formats);
 
