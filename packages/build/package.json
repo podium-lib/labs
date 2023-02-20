@@ -1,6 +1,6 @@
 {
   "name": "@podium/experimental-podlet-build",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "main": "index.js",
   "type": "module",
   "bin": {
