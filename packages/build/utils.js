@@ -1,10 +1,10 @@
 // @ts-nocheck
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { build, transform } from "esbuild";
 import { start } from "@fastify/restartable";
 import sandbox from "fastify-sandbox";
-import { createRequire } from 'module';
+import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
 
@@ -69,26 +69,10 @@ export async function buildDsdPolyfill(options) {
   // DSD polyfill
   const contentPolyfill = await transform(dsdPolyfill, {
     format: "esm",
-    minify: true,
+    minify: true
   });
   writeFileSync(join(outdir, "dsd-polyfill.js"), contentPolyfill.code);
 }
-
-// export async function buildHydrateSupport(options) {
-//   options.logger.info("Hydrate support build...");
-//   const hydrateSupportSrc = `import 'lit/experimental-hydrate-support.js';`;
-//   writeFileSync(join(tmpdir, "hydrate-support.js"), hydrateSupportSrc);
-
-//   await build({
-//     minify: true,
-//     bundle: true,
-//     format: "esm",
-//     outfile: join(outdir, "hydrate-support.js"),
-//     entryPoints: [join(tmpdir, "hydrate-support.js")],
-//     legalComments: `none`,
-//     sourcemap: true,
-//   });
-// }
 
 export async function startServer({
   name = "",
@@ -103,7 +87,7 @@ export async function startServer({
   logger,
   component = true,
   mode = "hydrate",
-  config = {},
+  config = {}
 } = {}) {
   logger.info(`starting development server on port: ${port}`);
   // Fastify provides 2 modules to support hot reloading. "sandbox" and "restartable"
@@ -113,30 +97,14 @@ export async function startServer({
   const started = await start({
     logger,
     app: (app, opts, done) => {
-      const pluginPath = require.resolve('@podium/experimental-fastify-podlet-plugin');
-      app.register(sandbox, { path: pluginPath, options: { name,
-        version,
-        pathname,
-        fallback,
-        development,
-        content,
-        manifest,
-        component,
-        mode, }
+      const pluginPath = require.resolve("@podium/experimental-fastify-podlet-plugin");
+      // register podium plugin using sandbox to enable reloading
+      app.register(sandbox, {
+        path: pluginPath,
+        options: { name, version, pathname, fallback, development, content, manifest, component, mode }
       });
 
-      // app.register(fastifyPodletPlugin, {
-      //   name,
-      //   version,
-      //   pathname,
-      //   fallback,
-      //   development,
-      //   content,
-      //   manifest,
-      //   component,
-      //   mode,
-      // });
-
+      // register user provided plugin using sandbox to enable reloading
       const serverFilePath = join(process.cwd(), "server.js");
       if (existsSync(serverFilePath)) {
         app.register(sandbox, { path, options: { config, app: app.podlet, eik: app.eik } });
@@ -145,17 +113,32 @@ export async function startServer({
       done();
     },
     port,
-    ignoreTrailingSlash: true,
+    ignoreTrailingSlash: true
   });
   await started.listen();
+  // restart is a method that can be used to restart the app which will reload in plugin modules defined with sandbox
+  // above
   return started.restart;
 }
 
+/**
+ * Creates temporary directories necessary for builds
+ * @param {{ logger: { info(message: string) {} } }} options
+ */
 export async function mkTempDirs({ logger }) {
+  logger.info('creating temporary directories...');
   if (!existsSync(outdir)) {
     mkdirSync(outdir);
   }
   if (!existsSync(tmpdir)) {
     mkdirSync(tmpdir);
+  }
+}
+
+
+export async function cleanTempDirs({ logger }) {
+  logger.info('clean temporary directories...');
+  if (existsSync(tmpdir)) {
+    rmSync(tmpdir, { recursive: true, force: true });
   }
 }

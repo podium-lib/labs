@@ -14,6 +14,7 @@ import {
   mkTempDirs,
   tmpdir,
   outdir,
+  cleanTempDirs,
 } from "./utils.js";
 import pino from "pino";
 import config from "./config.js";
@@ -95,6 +96,7 @@ if (config.get("app.development")) {
       name: config.get("app.name"),
       logger,
     });
+    await cleanTempDirs({ logger });
   });
 
   // Esbuild built in server which provides an SSE endpoint the client can subscripe to
@@ -112,6 +114,7 @@ await buildClient({
   name: config.get("app.name"),
   logger,
 });
+await cleanTempDirs({ logger });
 
 if (config.get("app.development")) {
   restart = await startServer({

@@ -10,10 +10,10 @@ import {
   buildServer,
   buildClient,
   buildDsdPolyfill,
-//   buildHydrateSupport,
   mkTempDirs,
   tmpdir,
   outdir,
+  cleanTempDirs,
 } from "./utils.js";
 import config from "./config.js";
 
@@ -65,5 +65,4 @@ await mkTempDirs({ logger });
 await buildServer(serverBuildOptions);
 await buildClient(clientBuildOptions);
 await buildDsdPolyfill({ name: config.get('app.name'), logger });
-// await buildHydrateSupport({ logger });
-
+await cleanTempDirs({ logger });
