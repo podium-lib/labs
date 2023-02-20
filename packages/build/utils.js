@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { build, transform } from "esbuild";
 import { start } from "@fastify/restartable";
 import sandbox from "fastify-sandbox";
-import { nmpPlugin } from "@nmp/podium/server";
+import { fastifyPodletPlugin } from "@podium/experimental-fastify-podlet-plugin";
 
 export const outdir = join(process.cwd(), "dist");
 export const tmpdir = join(process.cwd(), "temp");
@@ -111,7 +111,7 @@ export async function startServer({
   const started = await start({
     logger,
     app: (app, opts, done) => {
-      app.register(nmpPlugin, {
+      app.register(fastifyPodletPlugin, {
         name,
         version,
         pathname,
