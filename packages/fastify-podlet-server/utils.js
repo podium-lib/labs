@@ -34,6 +34,7 @@ export async function buildServer(options) {
   } else {
     delete options.name;
     delete options.logger;
+    delete options.development;
     await build(options);
   }
 }
@@ -59,6 +60,7 @@ export async function buildClient(options) {
   } else {
     delete options.name;
     delete options.logger;
+    delete options.development;
     await build(options);
   }
 }

@@ -42,6 +42,7 @@ export const serverBuildOptions = {
   legalComments: `none`,
   platform: "node",
   sourcemap: true,
+  development: false,
 };
 
 export const clientBuildOptions = {
@@ -59,6 +60,7 @@ export const clientBuildOptions = {
   target: ["es2017"],
   legalComments: `none`,
   sourcemap: true,
+  development: false,
 };
 
 await mkTempDirs({ logger });
