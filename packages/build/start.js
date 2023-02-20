@@ -4,7 +4,7 @@
 /* eslint-disable no-console */
 import { join } from "node:path";
 import fastify from "fastify";
-import { fastifyPodletPlugin } from "@podium/experimental-fastify-podlet-plugin";
+import fastifyPodletPlugin from "@podium/experimental-fastify-podlet-plugin";
 import config from "./config.js";
 import { existsSync } from "node:fs";
 

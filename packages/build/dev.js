@@ -10,8 +10,6 @@ import { minifyHTMLLiteralsPlugin } from "esbuild-plugin-minify-html-literals";
 import {
   buildServer,
   buildClient,
-  buildDsdPolyfill,
-  // buildHydrateSupport,
   startServer,
   mkTempDirs,
   tmpdir,
@@ -114,8 +112,6 @@ await buildClient({
   name: config.get("app.name"),
   logger,
 });
-await buildDsdPolyfill({ name: config.get("app.name"), logger });
-// await buildHydrateSupport({ logger });
 
 if (config.get("app.development")) {
   restart = await startServer({

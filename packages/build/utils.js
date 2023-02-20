@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { build, transform } from "esbuild";
 import { start } from "@fastify/restartable";
 import sandbox from "fastify-sandbox";
-import { fastifyPodletPlugin } from "@podium/experimental-fastify-podlet-plugin";
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 
 export const outdir = join(process.cwd(), "dist");
 export const tmpdir = join(process.cwd(), "temp");
@@ -111,8 +113,8 @@ export async function startServer({
   const started = await start({
     logger,
     app: (app, opts, done) => {
-      app.register(fastifyPodletPlugin, {
-        name,
+      const pluginPath = require.resolve('@podium/experimental-fastify-podlet-plugin');
+      app.register(sandbox, { path: pluginPath, options: { name,
         version,
         pathname,
         fallback,
@@ -120,8 +122,20 @@ export async function startServer({
         content,
         manifest,
         component,
-        mode,
+        mode, }
       });
+
+      // app.register(fastifyPodletPlugin, {
+      //   name,
+      //   version,
+      //   pathname,
+      //   fallback,
+      //   development,
+      //   content,
+      //   manifest,
+      //   component,
+      //   mode,
+      // });
 
       const serverFilePath = join(process.cwd(), "server.js");
       if (existsSync(serverFilePath)) {

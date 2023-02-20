@@ -16,6 +16,10 @@ const config = convict({ ...schema, ...userSchema });
 const domain = config.get("app.domain");
 const env = config.get("app.env");
 
+if (env === 'local') {
+  config.load({ app: { development: true } });
+}
+
 const { name } = (
   await import(join(process.cwd(), "package.json"), {
     assert: { type: "json" },

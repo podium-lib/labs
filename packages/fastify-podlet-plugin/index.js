@@ -81,9 +81,10 @@ const plugin = async function nmpPlugin(fastify, opts) {
 
   const metricStreams = [];
 
-  const dsdPolyfill = readFileSync(
-    join(process.cwd(), "dist", "dsd-polyfill.js")
-  );
+  let dsdPolyfill = "";
+  try {
+    dsdPolyfill = readFileSync(join(process.cwd(), "dist", "dsd-polyfill.js"), { encoding: 'utf8' });
+  } catch (err) {}
   const podlet = new Podlet({
     name: opts.name,
     version: opts.version,
@@ -248,12 +249,16 @@ const plugin = async function nmpPlugin(fastify, opts) {
 
   fastify.decorateReply("hydrate", function hydrate(template, file) {
     this.type("text/html");
-    const markup = Array.from(ssr(html`${unsafeHTML(template)}`)).join("");
+    const markup = Array.from(
+      ssr(
+        html`
+          ${unsafeHTML(template)}
+        `
+      )
+    ).join("");
     // @ts-ignore
     this.podiumSend(
       `${markup}<script>${dsdPolyfill}</script><script type="module" src="${
-        eik.file("/hydrate-support.js").value
-      }"></script><script type="module" src="${
         eik.file(`/client/${file}`).value
       }"></script>`
     );
@@ -261,7 +266,13 @@ const plugin = async function nmpPlugin(fastify, opts) {
 
   fastify.decorateReply("ssrOnly", function ssrOnly(template) {
     this.type("text/html");
-    const markup = Array.from(ssr(html`${unsafeHTML(template)}`)).join("");
+    const markup = Array.from(
+      ssr(
+        html`
+          ${unsafeHTML(template)}
+        `
+      )
+    ).join("");
     // @ts-ignore
     this.podiumSend(`${markup}<script>${dsdPolyfill}</script>`);
   });
@@ -351,5 +362,4 @@ const plugin = async function nmpPlugin(fastify, opts) {
   }
 };
 
-const fastifyPodletPlugin = fp(plugin);
-export { fastifyPodletPlugin };
+export default fp(plugin);
