@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join, basename, parse } from "node:path";
 import ResponseTiming from "fastify-metrics-js-response-timing";
 import fp from "fastify-plugin";
 import { html } from "lit";
@@ -10,6 +11,8 @@ import { render as ssr } from "@lit-labs/ssr";
 import Podlet from "@podium/podlet";
 import fastifyPodletPlugin from "@podium/fastify-podlet";
 import ProcessExceptionHandlers from "./process-exception-handlers.js";
+import esbuild from "esbuild";
+import { minifyHTMLLiteralsPlugin } from "esbuild-plugin-minify-html-literals";
 
 /**
  * TODO:
@@ -93,13 +96,6 @@ const plugin = async function nmpPlugin(fastify, opts) {
 
   fastify.decorate("podlet", podlet);
   fastify.decorate("proxy", podlet.proxy.bind(podlet));
-
-  if (existsSync(join(process.cwd(), "content.js"))) {
-    await import(join(process.cwd(), "dist", "server", "content.js"));
-  }
-  if (existsSync(join(process.cwd(), "fallback.js"))) {
-    await import(join(process.cwd(), "dist", "server", "fallback.js"));
-  }
 
   const eik = new EikClient({
     development: opts.development,
@@ -239,19 +235,74 @@ const plugin = async function nmpPlugin(fastify, opts) {
     }
   );
 
-  fastify.decorateReply("hydrate", function hydrate(template, file) {
+  const importFileForSSR = async (file) => {
+    const type = parse(file).name;
+    const outdir = join(process.cwd(), "dist", "server");
+    // import cache breaking filename using date string
+    const ssrfile = join(outdir, `${basename(file)}?s=${Date.now()}`);
+    if (existsSync(file)) {
+      try {
+        await esbuild.build({
+          entryPoints: [file],
+          bundle: true,
+          format: "esm",
+          outdir,
+          minify: true,
+          plugins: [
+            // {
+            //   name: "define-element-plugin",
+            //   setup(build) {
+            //     build.onLoad({ filter: /content\.js$/ }, async (args) => {
+            //       let input = await readFile(args.path, 'utf8');
+            //       return { 
+            //         contents: `${input}\ncustomElements.define("${opts.name}-content",Content)`
+            //       };
+            //     });
+            //     build.onLoad({ filter: /fallback\.js$/ }, async (args) => {
+            //       let input = await readFile(args.path, 'utf8');
+            //       return { 
+            //         contents: `${input}\ncustomElements.define("${opts.name}-fallback",Fallback)`
+            //       };
+            //     });
+            //   }
+            // },
+            minifyHTMLLiteralsPlugin()
+          ],
+          legalComments: `none`,
+          platform: "node",
+          sourcemap: true,
+        });
+        // import fresh copy of the custom element
+        const Element = (await import(ssrfile)).default;
+
+        // if already defined from a previous request, delete from registry
+        if (customElements.get(`${opts.name}-${type}`)) {
+          // @ts-ignore
+          customElements.__definitions.delete(`${opts.name}-${type}`);
+        }
+
+        // define newly imported custom element in the registry
+        customElements.define(`${opts.name}-${type}`, Element);
+      } catch(err) {
+        console.log(err)
+      }
+    }
+  };
+
+  fastify.decorateReply("hydrate", async function hydrate(template, file) {
     this.type("text/html");
+    await importFileForSSR(join(process.cwd(), file));
+    
     const markup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
     // @ts-ignore
     this.podiumSend(
-      `${markup}<script>${dsdPolyfill}</script><script type="module" src="${
-        eik.file(`/client/${file}`).value
-      }"></script>`
+      `${markup}<script>${dsdPolyfill}</script><script type="module" src="${eik.file(`/client/${file}`).value}"></script>`
     );
   });
 
-  fastify.decorateReply("ssrOnly", function ssrOnly(template) {
+  fastify.decorateReply("ssrOnly", async function ssrOnly(template, file) {
     this.type("text/html");
+    await importFileForSSR(join(process.cwd(), file));
     const markup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
     // @ts-ignore
     this.podiumSend(`${markup}<script>${dsdPolyfill}</script>`);
@@ -297,7 +348,7 @@ const plugin = async function nmpPlugin(fastify, opts) {
       switch (renderMode) {
         case renderModes.SSR_ONLY:
           // @ts-ignore
-          reply.ssrOnly(template);
+          reply.ssrOnly(template, "content.js");
           break;
         case renderModes.CSR_ONLY:
           // @ts-ignore
@@ -305,7 +356,7 @@ const plugin = async function nmpPlugin(fastify, opts) {
           break;
         case renderModes.HYDRATE:
           // @ts-ignore
-          reply.hydrate(template, "content.js");
+          await reply.hydrate(template, "content.js");
           break;
       }
     });
@@ -340,7 +391,7 @@ const plugin = async function nmpPlugin(fastify, opts) {
       switch (renderMode) {
         case renderModes.SSR_ONLY:
           // @ts-ignore
-          reply.ssrOnly(template);
+          reply.ssrOnly(template, "fallback.js");
           break;
         case renderModes.CSR_ONLY:
           // @ts-ignore
