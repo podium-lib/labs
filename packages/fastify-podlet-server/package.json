@@ -1,6 +1,6 @@
 {
   "name": "@podium/experimental-fastify-podlet-server",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "type": "module",
   "bin": {
     "podlet-dev": "./commands/dev.js",
