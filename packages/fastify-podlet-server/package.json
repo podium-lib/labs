@@ -1,17 +1,14 @@
 {
   "name": "@podium/experimental-fastify-podlet-server",
   "version": "0.0.2",
-  "main": "index.js",
   "type": "module",
   "bin": {
-    "podlet-dev": "./dev.js",
-    "podlet-start": "./start.js",
-    "podlet-build": "./build.js"
+    "podlet-dev": "./commands/dev.js",
+    "podlet-start": "./commands/start.js",
+    "podlet-build": "./commands/build.js"
   },
   "exports": {
-    ".": "./index.js",
-    "./config": "./config.js",
-    "./server": "./dev-server.js"
+    "./config": "./lib/config.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
