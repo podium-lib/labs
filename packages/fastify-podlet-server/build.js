@@ -1,70 +1,43 @@
 #!/usr/bin/env node
 
-// @ts-nocheck
 /* eslint-disable no-console */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import pino from "pino";
+import esbuild from "esbuild";
 import { minifyHTMLLiteralsPlugin } from "esbuild-plugin-minify-html-literals";
-import {
-  buildServer,
-  buildClient,
-  buildDsdPolyfill,
-  mkTempDirs,
-  tmpdir,
-  outdir,
-  cleanTempDirs,
-} from "./utils.js";
 import config from "./config.js";
+import wrapComponentsPlugin from "./lib/esbuild-wrap-components-plugin.js";
 
-const contentTempFilePath = join(tmpdir, "content.js");
-const fallbackTempFilePath = join(tmpdir, "./fallback.js");
+const NAME = /** @type {string} */ (/** @type {unknown} */ (config.get("app.name")));
+const MODE = config.get("app.mode");
+const CWD = process.cwd();
+const OUTDIR = join(CWD, "dist");
+const CLIENT_OUTDIR = join(OUTDIR, "client");
+const CONTENT_FILEPATH = join(CWD, "content.js");
+const FALLBACK_FILEPATH = join(CWD, "fallback.js");
 
-const logger = pino();
-
-let entryPoints = [];
-if (existsSync(join(process.cwd(), 'content.js'))) {
-  entryPoints.push(contentTempFilePath);
+const entryPoints = [];
+if (existsSync(CONTENT_FILEPATH)) {
+  entryPoints.push(CONTENT_FILEPATH);
 }
-if (existsSync(join(process.cwd(), 'fallback.js'))) {
-  entryPoints.push(fallbackTempFilePath);
+if (existsSync(FALLBACK_FILEPATH)) {
+  entryPoints.push(FALLBACK_FILEPATH);
 }
 
-export const serverBuildOptions = {
-  name: config.get('app.name'),
-  logger,
-  entryPoints,
-  bundle: true,
-  format: "esm",
-  outdir: join(outdir, "server"),
-  minify: true,
-  plugins: [minifyHTMLLiteralsPlugin()],
-  legalComments: `none`,
-  platform: "node",
-  sourcemap: true,
-  development: false,
-};
-
-export const clientBuildOptions = {
-  name: config.get('app.name'),
-  logger,
-  plugins: [
-    // custom plugin to handle mapping css file path from 'warp:styles' to an actual file path on disk
-    minifyHTMLLiteralsPlugin(),
-  ],
-  entryPoints,
-  bundle: true,
-  format: "esm",
-  outdir: join(outdir, "client"),
-  minify: true,
-  target: ["es2017"],
-  legalComments: `none`,
-  sourcemap: true,
-  development: false,
-};
-
-await mkTempDirs({ logger });
-await buildServer(serverBuildOptions);
-await buildClient(clientBuildOptions);
-await buildDsdPolyfill({ name: config.get('app.name'), logger });
-await cleanTempDirs({ logger });
+/**
+ * Build a client side bundle into dist/client unless app.mode has been set to ssr-only,
+ * in which case, no client side code is needed.
+ */
+if (MODE !== "ssr-only") {
+  await esbuild.build({
+    plugins: [wrapComponentsPlugin({ name: NAME, hydrate: MODE === "hydrate" }), minifyHTMLLiteralsPlugin()],
+    entryPoints,
+    bundle: true,
+    format: "esm",
+    outdir: CLIENT_OUTDIR,
+    minify: true,
+    target: ["es2017"],
+    legalComments: `none`,
+    sourcemap: true,
+  });
+}

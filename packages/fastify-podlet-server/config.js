@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import convict from "convict";
 import { schema, formats } from "./lib/config-schema.js";
@@ -34,11 +35,7 @@ if (env === "local") {
 }
 
 // name defaults to the name field in package.json
-const { name } = (
-  await import(join(process.cwd(), "package.json"), {
-    assert: { type: "json" },
-  })
-).default;
+const { name } = JSON.parse(await readFile(join(process.cwd(), "package.json"), { encoding: "utf8" }));
 config.load({ app: { name } });
 
 // if a fallback is defined, set the fallback path

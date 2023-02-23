@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-
 // @ts-nocheck
-/* eslint-disable no-console */
+
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import fastify from "fastify";
 import fastifyPodletPlugin from "./lib/fastify-podlet-plugin.js";
 import config from "./config.js";
-import { existsSync } from "node:fs";
 
 const app = fastify({ logger: true, ignoreTrailingSlash: true });
+
 app.register(fastifyPodletPlugin, {
   name: config.get("app.name"),
   version: config.get("podlet.version"),
@@ -21,6 +21,7 @@ app.register(fastifyPodletPlugin, {
   mode: config.get("app.mode"),
 });
 
+// Load user server.js file if provided.
 const serverFilePath = join(process.cwd(), "server.js");
 if (existsSync(serverFilePath)) {
   const server = (await import(serverFilePath)).default;

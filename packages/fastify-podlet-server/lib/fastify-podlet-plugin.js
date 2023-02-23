@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { join, basename, parse } from "node:path";
 import ResponseTiming from "fastify-metrics-js-response-timing";
 import fp from "fastify-plugin";
@@ -81,8 +80,9 @@ const plugin = async function nmpPlugin(fastify, opts) {
 
   let dsdPolyfill = "";
   try {
-    dsdPolyfill = readFileSync(join(process.cwd(), "dist", "dsd-polyfill.js"), { encoding: "utf8" });
+    dsdPolyfill = readFileSync(new URL("../dsd-polyfill.js", import.meta.url), { encoding: "utf8" });
   } catch (err) {}
+
   const podlet = new Podlet({
     name: opts.name,
     version: opts.version,
@@ -235,37 +235,39 @@ const plugin = async function nmpPlugin(fastify, opts) {
     }
   );
 
-  const importFileForSSR = async (file) => {
-    const type = parse(file).name;
+  /**
+   * Imports a custom element by pathname, bundles it and registers it in the server side custom element
+   * registry.
+   * In production mode, this happens 1x for each unique filepath after which this function will noop
+   * In development mode, every call to this function will yield a fresh version of the custom element being re-registered
+   * to the custom element registry.
+   * @param {string} filepath
+   */
+  const importComponentForSSR = async (filepath) => {
+    const type = parse(filepath).name;
     const outdir = join(process.cwd(), "dist", "server");
+
+    // if already defined from a previous request, delete from registry
+    if (customElements.get(`${opts.name}-${type}`)) {
+
+      // if in production mode and the component has already been defined,
+      // no more work is needed, so we bail early
+      if (!opts.development) return;
+      // @ts-ignore
+      customElements.__definitions.delete(`${opts.name}-${type}`);
+    }
+
     // import cache breaking filename using date string
-    const ssrfile = join(outdir, `${basename(file)}?s=${Date.now()}`);
-    if (existsSync(file)) {
+    const ssrfile = join(outdir, `${basename(filepath)}?s=${Date.now()}`);
+    if (existsSync(filepath)) {
       try {
         await esbuild.build({
-          entryPoints: [file],
+          entryPoints: [filepath],
           bundle: true,
           format: "esm",
           outdir,
           minify: true,
           plugins: [
-            // {
-            //   name: "define-element-plugin",
-            //   setup(build) {
-            //     build.onLoad({ filter: /content\.js$/ }, async (args) => {
-            //       let input = await readFile(args.path, 'utf8');
-            //       return { 
-            //         contents: `${input}\ncustomElements.define("${opts.name}-content",Content)`
-            //       };
-            //     });
-            //     build.onLoad({ filter: /fallback\.js$/ }, async (args) => {
-            //       let input = await readFile(args.path, 'utf8');
-            //       return { 
-            //         contents: `${input}\ncustomElements.define("${opts.name}-fallback",Fallback)`
-            //       };
-            //     });
-            //   }
-            // },
             minifyHTMLLiteralsPlugin()
           ],
           legalComments: `none`,
@@ -274,12 +276,6 @@ const plugin = async function nmpPlugin(fastify, opts) {
         });
         // import fresh copy of the custom element
         const Element = (await import(ssrfile)).default;
-
-        // if already defined from a previous request, delete from registry
-        if (customElements.get(`${opts.name}-${type}`)) {
-          // @ts-ignore
-          customElements.__definitions.delete(`${opts.name}-${type}`);
-        }
 
         // define newly imported custom element in the registry
         customElements.define(`${opts.name}-${type}`, Element);
@@ -291,7 +287,7 @@ const plugin = async function nmpPlugin(fastify, opts) {
 
   fastify.decorateReply("hydrate", async function hydrate(template, file) {
     this.type("text/html");
-    await importFileForSSR(join(process.cwd(), file));
+    await importComponentForSSR(join(process.cwd(), file));
     
     const markup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
     // @ts-ignore
@@ -302,7 +298,7 @@ const plugin = async function nmpPlugin(fastify, opts) {
 
   fastify.decorateReply("ssrOnly", async function ssrOnly(template, file) {
     this.type("text/html");
-    await importFileForSSR(join(process.cwd(), file));
+    await importComponentForSSR(join(process.cwd(), file));
     const markup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
     // @ts-ignore
     this.podiumSend(`${markup}<script>${dsdPolyfill}</script>`);
