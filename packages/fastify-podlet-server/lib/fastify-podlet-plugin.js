@@ -56,14 +56,14 @@ const defaults = {
  *  name: string;
  *  version: string;
  *  pathname: string;
- *  content: string;
- *  manifest: string;
- *  fallback: string;
- *  development: boolean;
- *  grace: number,
- *  component: boolean;
- *  renderMode: string;
- *  timing: { timeAllRoutes: boolean, groupStatusCodes: boolean }
+ *  content?: string;
+ *  manifest?: string;
+ *  fallback?: string;
+ *  development?: boolean;
+ *  grace?: number,
+ *  component?: boolean;
+ *  renderMode?: string;
+ *  timing?: { timeAllRoutes: boolean, groupStatusCodes: boolean }
  * }} opts
  */
 const plugin = async function nmpPlugin(fastify, opts) {

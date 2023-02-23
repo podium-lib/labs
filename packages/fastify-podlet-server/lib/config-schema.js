@@ -52,6 +52,11 @@ export const schema = {
       format: ["hydrate", "csr-only", "ssr-only"],
       default: "hydrate",
     },
+    grace: {
+      doc: "Shutdown grace period",
+      format: Number,
+      default: 0,
+    },
   },
   podlet: {
     pathname: {

@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
-// @ts-nocheck
 import { existsSync } from "node:fs";
-import chokidar from "chokidar";
-import fastify from "fastify";
-import { context } from "esbuild";
 import { join } from "node:path";
+import chokidar from "chokidar";
+import { context } from "esbuild";
 import { minifyHTMLLiteralsPlugin } from "esbuild-plugin-minify-html-literals";
 import pino from "pino";
+import sandbox from "fastify-sandbox";
+import { start } from "@fastify/restartable";
 import config from "./config.js";
 import fastifyPodletPlugin from "./lib/fastify-podlet-plugin.js";
 import wrapComponentsPlugin from "./lib/esbuild-wrap-components-plugin.js";
@@ -21,6 +21,8 @@ const LOGGER = pino({
     },
   },
 });
+const NAME = /** @type {string} */ (/** @type {unknown} */ (config.get("app.name")));
+const MODE = config.get("app.mode");
 const CWD = process.cwd();
 const OUTDIR = join(CWD, "dist");
 const CLIENT_OUTDIR = join(OUTDIR, "client");
@@ -36,6 +38,8 @@ if (existsSync(FALLBACK_FILEPATH)) {
   entryPoints.push(FALLBACK_FILEPATH);
 }
 
+// create an esbuild context object for the client side build so that we
+// can optimally rebundle whenever files change
 const buildContext = await context({
   entryPoints,
   bundle: true,
@@ -46,20 +50,20 @@ const buildContext = await context({
   legalComments: `none`,
   sourcemap: true,
   plugins: [
-    wrapComponentsPlugin({ name: config.get("app.name"), hydrate: config.get("app.mode") === "hydrate", livereload: true }),
+    wrapComponentsPlugin({ name: NAME, hydrate: MODE === "hydrate", livereload: true }),
     minifyHTMLLiteralsPlugin(),
   ],
 });
 
 // Chokidar provides super fast native file system watching
-const watcher = chokidar.watch(["**/*.js", "**/*.json"], {
-  ignored: /package-lock.json|server.js|node_modules|dist|temp|vendor|(^|[\/\\])\../, // ignore dotfiles and dirs
+const clientWatcher = chokidar.watch(["content.js", "fallback.js", "client/**/*.js"], {
   persistent: true,
   followSymlinks: false,
   cwd: process.cwd(),
 });
 
-watcher.on("change", async () => {
+// rebuild the client side bundle whenever a client side related file changes
+clientWatcher.on("change", async () => {
   await buildContext.rebuild();
 });
 
@@ -68,28 +72,49 @@ watcher.on("change", async () => {
 // new EventSource('http://localhost:6935/esbuild').addEventListener('change', () => { location.reload() });
 await buildContext.serve({ port: 6935 });
 
-// Build the bundle
+// Build the bundle for the first time
 await buildContext.rebuild();
 
 // Create and start a development server
-const server = fastify({ logger: LOGGER });
+const started = await start({
+  logger: LOGGER,
+  // @ts-ignore
+  app: (app, opts, done) => {
+    app.register(fastifyPodletPlugin, {
+      name: NAME,
+      version: config.get("podlet.version"),
+      pathname: config.get("podlet.pathname"),
+      manifest: config.get("podlet.manifest"),
+      content: config.get("podlet.content"),
+      fallback: config.get("podlet.fallback"),
+      development: config.get("app.development"),
+      component: config.get("app.component"),
+      renderMode: config.get("app.mode"),
+    });
 
-// Register the main server Fastify plugin.
-server.register(fastifyPodletPlugin, {
-  name: config.get("app.name"),
-  version: config.get("podlet.version"),
-  pathname: config.get("podlet.pathname"),
-  manifest: config.get("podlet.manifest"),
-  content: config.get("podlet.content"),
-  fallback: config.get("podlet.fallback"),
-  development: config.get("app.development"),
-  component: config.get("app.component"),
-  mode: config.get("app.mode"),
+    // register user provided plugin using sandbox to enable reloading
+    if (existsSync(SERVER_FILEPATH)) {
+      app.register(sandbox, { path: SERVER_FILEPATH, options: { config, podlet: app.podlet, eik: app.eik } });
+    }
+
+    done();
+  },
+  port: config.get("app.port"),
+  ignoreTrailingSlash: true,
 });
 
-// register user provided plugin using sandbox to enable reloading
-if (existsSync(SERVER_FILEPATH)) {
-  app.register((await import(SERVER_FILEPATH)).default, { path, options: { config, app: app.podlet, eik: app.eik } });
-}
+// Chokidar provides super fast native file system watching
+// of server files. Either server.js or any js files inside a server folder
+const serverWatcher = chokidar.watch(["server.js", "server/**/*.js"], {
+  persistent: true,
+  followSymlinks: false,
+  cwd: process.cwd(),
+});
 
-server.listen({ port: config.get("app.port") });
+// restart the server whenever a server related file changes
+serverWatcher.on("change", async () => {
+  await started.restart();
+});
+
+// start the server for the first time
+await started.listen();
