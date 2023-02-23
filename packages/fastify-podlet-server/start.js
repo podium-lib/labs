@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import fastify from "fastify";
 import fastifyPodletPlugin from "./lib/fastify-podlet-plugin.js";
-import config from "./config.js";
+import config from "./lib/config.js";
 
 const app = fastify({ logger: true, ignoreTrailingSlash: true });
 

@@ -8,7 +8,7 @@ import { minifyHTMLLiteralsPlugin } from "esbuild-plugin-minify-html-literals";
 import pino from "pino";
 import sandbox from "fastify-sandbox";
 import { start } from "@fastify/restartable";
-import config from "./config.js";
+import config from "./lib/config.js";
 import fastifyPodletPlugin from "./lib/fastify-podlet-plugin.js";
 import wrapComponentsPlugin from "./lib/esbuild-wrap-components-plugin.js";
 

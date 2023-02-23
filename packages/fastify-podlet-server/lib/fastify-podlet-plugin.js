@@ -80,7 +80,7 @@ const plugin = async function nmpPlugin(fastify, opts) {
 
   let dsdPolyfill = "";
   try {
-    dsdPolyfill = readFileSync(new URL("../dsd-polyfill.js", import.meta.url), { encoding: "utf8" });
+    dsdPolyfill = readFileSync(new URL("./dsd-polyfill.js", import.meta.url), { encoding: "utf8" });
   } catch (err) {}
 
   const podlet = new Podlet({

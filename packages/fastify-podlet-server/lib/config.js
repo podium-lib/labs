@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import convict from "convict";
-import { schema, formats } from "./lib/config-schema.js";
+import { schema, formats } from "./config-schema.js";
 
 convict.addFormats(formats);
 
