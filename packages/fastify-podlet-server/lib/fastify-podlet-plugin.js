@@ -78,7 +78,7 @@ const plugin = async function nmpPlugin(fastify, opts) {
 
   let dsdPolyfill = "";
   try {
-    dsdPolyfill = readFileSync(join(process.cwd(), "dist", "dsd-polyfill.js"), { encoding: 'utf8' });
+    dsdPolyfill = readFileSync(join(process.cwd(), "dist", "dsd-polyfill.js"), { encoding: "utf8" });
   } catch (err) {}
   const podlet = new Podlet({
     name: opts.name,
@@ -139,12 +139,9 @@ const plugin = async function nmpPlugin(fastify, opts) {
 
   // manifest route
   // @ts-ignore
-  fastify.get(
-    join("/", opts.name || "", podlet.manifest()),
-    async (req, reply) => {
-      return JSON.stringify(podlet);
-    }
-  );
+  fastify.get(join("/", opts.name || "", podlet.manifest()), async (req, reply) => {
+    return JSON.stringify(podlet);
+  });
 
   if (timing) {
     const responseTiming = new ResponseTiming(timing);
@@ -244,13 +241,7 @@ const plugin = async function nmpPlugin(fastify, opts) {
 
   fastify.decorateReply("hydrate", function hydrate(template, file) {
     this.type("text/html");
-    const markup = Array.from(
-      ssr(
-        html`
-          ${unsafeHTML(template)}
-        `
-      )
-    ).join("");
+    const markup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
     // @ts-ignore
     this.podiumSend(
       `${markup}<script>${dsdPolyfill}</script><script type="module" src="${
@@ -261,13 +252,7 @@ const plugin = async function nmpPlugin(fastify, opts) {
 
   fastify.decorateReply("ssrOnly", function ssrOnly(template) {
     this.type("text/html");
-    const markup = Array.from(
-      ssr(
-        html`
-          ${unsafeHTML(template)}
-        `
-      )
-    ).join("");
+    const markup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
     // @ts-ignore
     this.podiumSend(`${markup}<script>${dsdPolyfill}</script>`);
   });
@@ -283,77 +268,90 @@ const plugin = async function nmpPlugin(fastify, opts) {
   });
 
   if (existsSync(join(process.cwd(), "content.js"))) {
-    const contentOptions = {};
-    if (existsSync(join(process.cwd(), "schemas/content.js"))) {
-      contentOptions.schema = (
-        await import(join(process.cwd(), "schemas/content.js"))
-      ).default;
+    // if in development mode redirect root to content route
+    if (opts.development) {
+      fastify.get("/", (request, reply) => {
+        reply.redirect(join("/", opts.name || "", podlet.content()));
+      });
     }
 
-    // content route
-    fastify.get(
-      join("/", opts.name || "", podlet.content()),
-      contentOptions,
-      async (req, reply) => {
-        const initialState = JSON.stringify(
-          // @ts-ignore
-          (await setContentState(req, reply.app.podium.context)) || ""
-        );
-        const template = `<${opts.name}-content initial-state='${initialState}'></${opts.name}-content>`;
+    // register user defined validation schema for route if provided
+    // looks for a file named schemas/content.js and if present, imports
+    // and provides to route.
+    const contentOptions = {};
+    if (existsSync(join(process.cwd(), "schemas/content.js"))) {
+      contentOptions.schema = (await import(join(process.cwd(), "schemas/content.js"))).default;
+    }
 
-        switch (renderMode) {
-          case renderModes.SSR_ONLY:
-            // @ts-ignore
-            reply.ssrOnly(template);
-            break;
-          case renderModes.CSR_ONLY:
-            // @ts-ignore
-            reply.csrOnly(template, "content.js");
-            break;
-          case renderModes.HYDRATE:
-            // @ts-ignore
-            reply.hydrate(template, "content.js");
-            break;
-        }
+    // builds content route path out of root + app name + the content path value in the podlet manifest
+    // by default this will be / + folder name + / eg. /my-podlet/
+    const contentRoutePath = join("/", opts.name || "", podlet.content());
+    // content route
+    fastify.get(contentRoutePath, contentOptions, async (req, reply) => {
+      const initialState = JSON.stringify(
+        // @ts-ignore
+        (await setContentState(req, reply.app.podium.context)) || ""
+      );
+      const template = `<${opts.name}-content initial-state='${initialState}'></${opts.name}-content>`;
+
+      switch (renderMode) {
+        case renderModes.SSR_ONLY:
+          // @ts-ignore
+          reply.ssrOnly(template);
+          break;
+        case renderModes.CSR_ONLY:
+          // @ts-ignore
+          reply.csrOnly(template, "content.js");
+          break;
+        case renderModes.HYDRATE:
+          // @ts-ignore
+          reply.hydrate(template, "content.js");
+          break;
       }
-    );
+    });
+  } else {
+    // if in development mode and no content route is defined, redirect root to manifest route
+    if (opts.development) {
+      fastify.get("/", (request, reply) => {
+        reply.redirect(join("/", opts.name || "", podlet.manifest()));
+      });
+    }
   }
 
   if (existsSync(join(process.cwd(), "fallback.js"))) {
+    // register user defined validation schema for route if provided
+    // looks for a file named schemas/fallback.js and if present, imports
+    // and provides to route.
     const fallbackOptions = {};
     if (existsSync(join(process.cwd(), "schemas/fallback.js"))) {
-      fallbackOptions.schema = (
-        await import(join(process.cwd(), "schemas/fallback.js"))
-      ).default;
+      fallbackOptions.schema = (await import(join(process.cwd(), "schemas/fallback.js"))).default;
     }
 
+    // builds fallback route path out of root + app name + the fallback path value in the podlet manifest
+    // by default this will be / + folder name + /fallback eg. /my-podlet/fallback
+    const fallbackRoutePath = join("/", opts.name || "", podlet.fallback());
     // fallback route
-    // @ts-ignore
-    fastify.get(
-      join("/", opts.name || "", podlet.fallback()),
-      fallbackOptions,
-      async (req, reply) => {
-        const initialState = JSON.stringify(
+    fastify.get(fallbackRoutePath, fallbackOptions, async (req, reply) => {
+      const initialState = JSON.stringify(
+        // @ts-ignore
+        (await setFallbackState(req, reply.app.podium.context)) || ""
+      );
+      const template = `<${opts.name}-fallback initial-state='${initialState}'></${opts.name}-fallback>`;
+      switch (renderMode) {
+        case renderModes.SSR_ONLY:
           // @ts-ignore
-          (await setFallbackState(req, reply.app.podium.context)) || ""
-        );
-        const template = `<${opts.name}-fallback initial-state='${initialState}'></${opts.name}-fallback>`;
-        switch (renderMode) {
-          case renderModes.SSR_ONLY:
-            // @ts-ignore
-            reply.ssrOnly(template);
-            break;
-          case renderModes.CSR_ONLY:
-            // @ts-ignore
-            reply.csrOnly(template, "fallback.js");
-            break;
-          case renderModes.HYDRATE:
-            // @ts-ignore
-            reply.hydrate(template, "fallback.js");
-            break;
-        }
+          reply.ssrOnly(template);
+          break;
+        case renderModes.CSR_ONLY:
+          // @ts-ignore
+          reply.csrOnly(template, "fallback.js");
+          break;
+        case renderModes.HYDRATE:
+          // @ts-ignore
+          reply.hydrate(template, "fallback.js");
+          break;
       }
-    );
+    });
   }
 };
 

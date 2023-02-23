@@ -16,6 +16,13 @@ if (existsSync(join(process.cwd(), "config/schema.js"))) {
 
 const config = convict({ ...schema, ...userSchema });
 
+// we need to do this manually as using NODE_ENV as the default in schema produces some
+// weird results.
+// essentially, everytime you call load, NODE_ENV overwrites the value of app.env again.
+if (process.env.NODE_ENV === "development") {
+  config.set("app.env", "local");
+}
+
 // The expectation is that DOMAIN and NODE_ENV env vars will be set in production
 const domain = config.get("app.domain");
 const env = config.get("app.env");
@@ -25,10 +32,11 @@ const env = config.get("app.env");
 if (env === "local") {
   config.load({ app: { development: true } });
 }
+
 // name defaults to the name field in package.json
 const { name } = (
   await import(join(process.cwd(), "package.json"), {
-    assert: { type: "json" }
+    assert: { type: "json" },
   })
 ).default;
 config.load({ app: { name } });

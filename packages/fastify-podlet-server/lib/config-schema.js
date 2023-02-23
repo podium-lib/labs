@@ -9,7 +9,6 @@ export const schema = {
       doc: "Environments",
       format: ["local", "test", "production"],
       default: "local",
-      env: "NODE_ENV",
       arg: "env",
     },
     domain: {

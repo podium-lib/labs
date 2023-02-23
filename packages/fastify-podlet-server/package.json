@@ -4,9 +4,14 @@
   "main": "index.js",
   "type": "module",
   "bin": {
-    "podlet-dev": "./dev.js",
+    "podlet-dev": "./dev-server.js",
     "podlet-start": "./start.js",
     "podlet-build": "./build.js"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./config": "./config.js",
+    "./server": "./dev-server.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
