@@ -23,10 +23,10 @@ const fallbackTempFilePath = join(tmpdir, "./fallback.js");
 const logger = pino();
 
 let entryPoints = [];
-if (existsSync(join(process.cwd(), 'content.js')) && existsSync(contentTempFilePath)) {
+if (existsSync(join(process.cwd(), 'content.js'))) {
   entryPoints.push(contentTempFilePath);
 }
-if (existsSync(join(process.cwd(), 'fallback.js')) && existsSync(fallbackTempFilePath)) {
+if (existsSync(join(process.cwd(), 'fallback.js'))) {
   entryPoints.push(fallbackTempFilePath);
 }
 

@@ -4,7 +4,7 @@
   "main": "index.js",
   "type": "module",
   "bin": {
-    "podlet-dev": "./dev-server.js",
+    "podlet-dev": "./dev.js",
     "podlet-start": "./start.js",
     "podlet-build": "./build.js"
   },
