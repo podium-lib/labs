@@ -258,7 +258,11 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
 
   fastify.decorateReply("hydrate", async function hydrate(template, file) {
     this.type("text/html");
-    await importComponentForSSR(join(process.cwd(), file));
+    try {
+      await importComponentForSSR(join(process.cwd(), file));
+    } catch(err) {
+      fastify.log.error(err);
+    }
 
     const markup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
     // @ts-ignore
@@ -277,7 +281,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     this.podiumSend(`${markup}<script>${dsdPolyfill}</script>`);
   });
 
-  fastify.decorateReply("csrOnly", function csrOnly(template, file) {
+  fastify.decorateReply("csrOnly", async function csrOnly(template, file) {
     this.type("text/html");
     // @ts-ignore
     this.podiumSend(`${template}<script type="module" src="${eik.file(`/client/${file}`).value}"></script>`);
@@ -301,9 +305,8 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
 
     // builds content route path out of root + app name + the content path value in the podlet manifest
     // by default this will be / + folder name + / eg. /my-podlet/
-    const contentRoutePath = join("/", NAME || "", podlet.content());
     // content route
-    fastify.get(contentRoutePath, contentOptions, async (req, reply) => {
+    fastify.get(join("/", NAME || "", podlet.content()), contentOptions, async (req, reply) => {
       // enable timing metrics for this route
       reply.context.config.timing = true;
 
@@ -316,11 +319,11 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
       switch (RENDER_MODE) {
         case renderModes.SSR_ONLY:
           // @ts-ignore
-          reply.ssrOnly(template, "content.js");
+          await reply.ssrOnly(template, "content.js");
           break;
         case renderModes.CSR_ONLY:
           // @ts-ignore
-          reply.csrOnly(template, "content.js");
+          await reply.csrOnly(template, "content.js");
           break;
         case renderModes.HYDRATE:
           // @ts-ignore
@@ -348,9 +351,8 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
 
     // builds fallback route path out of root + app name + the fallback path value in the podlet manifest
     // by default this will be / + folder name + /fallback eg. /my-podlet/fallback
-    const fallbackRoutePath = join("/", NAME || "", podlet.fallback());
     // fallback route
-    fastify.get(fallbackRoutePath, fallbackOptions, async (req, reply) => {
+    fastify.get(join("/", NAME || "", podlet.fallback()), fallbackOptions, async (req, reply) => {
       // enable timing metrics for this route
       reply.context.config.timing = true;
 
@@ -362,15 +364,15 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
       switch (RENDER_MODE) {
         case renderModes.SSR_ONLY:
           // @ts-ignore
-          reply.ssrOnly(template, "fallback.js");
+          await reply.ssrOnly(template, "fallback.js");
           break;
         case renderModes.CSR_ONLY:
           // @ts-ignore
-          reply.csrOnly(template, "fallback.js");
+          await reply.csrOnly(template, "fallback.js");
           break;
         case renderModes.HYDRATE:
           // @ts-ignore
-          reply.hydrate(template, "fallback.js");
+          await reply.hydrate(template, "fallback.js");
           break;
       }
     });
