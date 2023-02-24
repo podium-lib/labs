@@ -60,6 +60,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     logger: fastify.log,
   });
 
+  fastify.decorate("config", config);
   fastify.decorate("podlet", podlet);
   fastify.decorate("proxy", podlet.proxy.bind(podlet));
 
