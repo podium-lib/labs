@@ -17,7 +17,6 @@ import compress from "@fastify/compress";
 
 /**
  * TODO:
- * - compression middleware
  * - localisation
  */
 
@@ -92,7 +91,6 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   const gauge = podlet.metrics.gauge({
     name: "active_podlet",
     description: "Indicates if a podlet is mounted and active",
-    // TODO: read this value from podium package.json
     labels: { podium_version: PODIUM_VERSION.major, podlet_name: NAME },
   });
   setImmediate(() => gauge.set(1));
@@ -135,7 +133,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
    *  }
    *
    *  // in content.js
-   *  class Content extends NmpElement {
+   *  class Content extends PodiumPodletElement {
    *    render() {
    *      // available on both server and client side.
    *      const { val1, val2 } = this.getInitialState();
@@ -179,7 +177,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
    *  }
    *
    *  // in fallback.js
-   *  class Fallback extends NmpElement {
+   *  class Fallback extends PodiumPodletElement {
    *    render() {
    *      // available on both server and client side.
    *      const { val1, val2 } = this.getInitialState();
@@ -262,8 +260,6 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     const polyfillMarkup = `<script>${DSD_POLYFILL}</script>`;
     const clientSideScript = `<script type="module" src="${`${BASE_PATH}/client/${file}`}"></script>`;
     const markup = fastify.podlet.render(this.app.podium, `${ssrMarkup}${polyfillMarkup}${clientSideScript}`);
-
-    // console.log(markup);
 
     // @ts-ignore
     COMPRESSION ? this.compress(markup) : this.send(markup);
