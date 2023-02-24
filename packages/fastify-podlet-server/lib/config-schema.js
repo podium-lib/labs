@@ -114,6 +114,13 @@ export const schema = {
       format: Boolean,
       default: true,
     }
+  },
+  assets: {
+    base: {
+      doc: "Base path or URL for assets. Eg. /static or https://assets.cdn.com/static. Locally this is files in the dist folder. DO NOT include trailing slash.",
+      format: String,
+      default: "/static"
+    }
   }
 };
 

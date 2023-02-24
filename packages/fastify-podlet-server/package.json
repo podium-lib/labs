@@ -22,7 +22,6 @@
   },
   "description": "",
   "dependencies": {
-    "@eik/node-client": "^1.1.41",
     "@fastify/compress": "^6.2.0",
     "@fastify/restartable": "^1.4.0",
     "@fastify/static": "^6.9.0",

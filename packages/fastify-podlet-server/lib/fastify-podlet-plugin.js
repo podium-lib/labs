@@ -4,7 +4,6 @@ import ResponseTiming from "fastify-metrics-js-response-timing";
 import fp from "fastify-plugin";
 import { html } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import EikClient from "@eik/node-client";
 import { fastifyStatic } from "@fastify/static";
 import { render as ssr } from "@lit-labs/ssr";
 import Podlet from "@podium/podlet";
@@ -17,7 +16,6 @@ import { SemVer } from "semver";
 
 /**
  * TODO:
- * - remove eik, make paths configurable
  * - compression middleware
  * - localisation
  */
@@ -44,6 +42,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   const TIMING_METRICS = config.get("metrics.timing.enabled");
   const TIME_ALL_ROUTES = config.get("metrics.timing.timeAllRoutes");
   const GROUP_STATUS_CODES = config.get("metrics.timing.groupStatusCodes");
+  const BASE_PATH = config.get("assets.base");
   const PACKAGE_JSON = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), { encoding: "utf8" }));
   const PODIUM_VERSION = new SemVer(PACKAGE_JSON.dependencies["@podium/podlet"].replace("^", "").replace("~", ""));
   const DSD_POLYFILL = readFileSync(new URL("./dsd-polyfill.js", import.meta.url), { encoding: "utf8" });
@@ -63,13 +62,6 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
 
   fastify.decorate("podlet", podlet);
   fastify.decorate("proxy", podlet.proxy.bind(podlet));
-
-  const eik = new EikClient({
-    development: DEVELOPMENT,
-    base: "/static",
-  });
-
-  fastify.decorate("eik", eik);
 
   // await fastify.register(compress, { global: true });
 
@@ -263,9 +255,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     const markup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
     // @ts-ignore
     this.podiumSend(
-      `${markup}<script>${DSD_POLYFILL}</script><script type="module" src="${
-        eik.file(`/client/${file}`).value
-      }"></script>`
+      `${markup}<script>${DSD_POLYFILL}</script><script type="module" src="${`${BASE_PATH}/client/${file}`}"></script>`
     );
   });
 
@@ -280,7 +270,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   fastify.decorateReply("csrOnly", async function csrOnly(template, file) {
     this.type("text/html");
     // @ts-ignore
-    this.podiumSend(`${template}<script type="module" src="${eik.file(`/client/${file}`).value}"></script>`);
+    this.podiumSend(`${template}<script type="module" src="${`${BASE_PATH}/client/${file}`}"></script>`);
   });
 
   if (existsSync(join(process.cwd(), "content.js"))) {
