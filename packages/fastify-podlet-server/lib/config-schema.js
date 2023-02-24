@@ -62,6 +62,11 @@ export const schema = {
       format: Boolean,
       default: true,
     },
+    compression: {
+      doc: "Enables/disables compression on routes",
+      format: Boolean,
+      default: true,
+    },
   },
   podlet: {
     pathname: {

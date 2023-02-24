@@ -13,6 +13,7 @@ import esbuild from "esbuild";
 import { minifyHTMLLiteralsPlugin } from "esbuild-plugin-minify-html-literals";
 import Metrics from "@metrics/client";
 import { SemVer } from "semver";
+import compress from "@fastify/compress";
 
 /**
  * TODO:
@@ -43,6 +44,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   const TIME_ALL_ROUTES = config.get("metrics.timing.timeAllRoutes");
   const GROUP_STATUS_CODES = config.get("metrics.timing.groupStatusCodes");
   const BASE_PATH = config.get("assets.base");
+  const COMPRESSION = config.get("app.compression");
   const PACKAGE_JSON = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), { encoding: "utf8" }));
   const PODIUM_VERSION = new SemVer(PACKAGE_JSON.dependencies["@podium/podlet"].replace("^", "").replace("~", ""));
   const DSD_POLYFILL = readFileSync(new URL("./dsd-polyfill.js", import.meta.url), { encoding: "utf8" });
@@ -64,7 +66,9 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   fastify.decorate("podlet", podlet);
   fastify.decorate("proxy", podlet.proxy.bind(podlet));
 
-  // await fastify.register(compress, { global: true });
+  if (COMPRESSION) {
+    await fastify.register(compress, { global: true });
+  }
 
   if (DEVELOPMENT) {
     fastify.register(fastifyStatic, {
@@ -246,32 +250,48 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   };
 
   fastify.decorateReply("hydrate", async function hydrate(template, file) {
-    this.type("text/html");
+    this.type("text/html; charset=utf-8");
+    // this.header("content-encoding", "gzip");
     try {
       await importComponentForSSR(join(process.cwd(), file));
     } catch(err) {
       fastify.log.error(err);
     }
 
-    const markup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
+    const ssrMarkup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
+    const polyfillMarkup = `<script>${DSD_POLYFILL}</script>`;
+    const clientSideScript = `<script type="module" src="${`${BASE_PATH}/client/${file}`}"></script>`;
+    const markup = fastify.podlet.render(this.app.podium, `${ssrMarkup}${polyfillMarkup}${clientSideScript}`);
+
+    // console.log(markup);
+
     // @ts-ignore
-    this.podiumSend(
-      `${markup}<script>${DSD_POLYFILL}</script><script type="module" src="${`${BASE_PATH}/client/${file}`}"></script>`
-    );
+    COMPRESSION ? this.compress(markup) : this.send(markup);
   });
 
   fastify.decorateReply("ssrOnly", async function ssrOnly(template, file) {
-    this.type("text/html");
-    await importComponentForSSR(join(process.cwd(), file));
-    const markup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
+    this.type("text/html; charset=utf-8");
+    try {
+      await importComponentForSSR(join(process.cwd(), file));
+    } catch(err) {
+      fastify.log.error(err);
+    }
+
+    const ssrMarkup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
+    const polyfillMarkup = `<script>${DSD_POLYFILL}</script>`;
+    const markup = fastify.podlet.render(this.app.podium, `${ssrMarkup}${polyfillMarkup}`);
+
     // @ts-ignore
-    this.podiumSend(`${markup}<script>${DSD_POLYFILL}</script>`);
+    COMPRESSION ? this.compress(markup) : this.send(markup);
   });
 
   fastify.decorateReply("csrOnly", async function csrOnly(template, file) {
-    this.type("text/html");
+    this.type("text/html; charset=utf-8");
+
+    const clientSideScript = `<script type="module" src="${`${BASE_PATH}/client/${file}`}"></script>`;
+    const markup = fastify.podlet.render(this.app.podium, `${template}${clientSideScript}`);
     // @ts-ignore
-    this.podiumSend(`${template}<script type="module" src="${`${BASE_PATH}/client/${file}`}"></script>`);
+    COMPRESSION ? this.compress(markup) : this.send(markup);
   });
 
   if (existsSync(join(process.cwd(), "content.js"))) {
@@ -316,7 +336,8 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
           // @ts-ignore
           await reply.hydrate(template, "content.js");
           break;
-      }
+        }
+      return reply
     });
   } else {
     // if in development mode and no content route is defined, redirect root to manifest route
@@ -362,6 +383,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
           await reply.hydrate(template, "fallback.js");
           break;
       }
+      return reply;
     });
   }
 
