@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import chokidar from "chokidar";
 import { context } from "esbuild";
@@ -29,6 +29,7 @@ const CLIENT_OUTDIR = join(OUTDIR, "client");
 const CONTENT_FILEPATH = join(CWD, "content.js");
 const FALLBACK_FILEPATH = join(CWD, "fallback.js");
 const SERVER_FILEPATH = join(process.cwd(), "server.js");
+const BUILD_FILEPATH = join(process.cwd(), "build.js");
 
 const entryPoints = [];
 if (existsSync(CONTENT_FILEPATH)) {
@@ -36,6 +37,23 @@ if (existsSync(CONTENT_FILEPATH)) {
 }
 if (existsSync(FALLBACK_FILEPATH)) {
   entryPoints.push(FALLBACK_FILEPATH);
+}
+
+// support user defined plugins via a build.js file
+const plugins = [
+  wrapComponentsPlugin({ name: NAME, hydrate: MODE === "hydrate", livereload: true }),
+  minifyHTMLLiteralsPlugin(),
+];
+if (existsSync(BUILD_FILEPATH)) {
+  try {
+    const userDefinedBuild = (await import(BUILD_FILEPATH)).default;
+    const userDefinedPlugins = await userDefinedBuild({ config });
+    if (Array.isArray(userDefinedPlugins)) {
+      plugins.unshift(...userDefinedPlugins);
+    }
+  } catch(err) {
+    // noop
+  }
 }
 
 // create an esbuild context object for the client side build so that we
@@ -49,10 +67,7 @@ const buildContext = await context({
   target: ["es2017"],
   legalComments: `none`,
   sourcemap: true,
-  plugins: [
-    wrapComponentsPlugin({ name: NAME, hydrate: MODE === "hydrate", livereload: true }),
-    minifyHTMLLiteralsPlugin(),
-  ],
+  plugins,
 });
 
 // Chokidar provides super fast native file system watching
@@ -84,7 +99,7 @@ const started = await start({
 
     // register user provided plugin using sandbox to enable reloading
     if (existsSync(SERVER_FILEPATH)) {
-      app.register(sandbox, { path: SERVER_FILEPATH, options: { config, podlet: app.podlet, eik: app.eik } });
+      app.register(sandbox, { path: SERVER_FILEPATH, options: { config, podlet: app.podlet } });
     }
 
     done();

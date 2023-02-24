@@ -15,6 +15,7 @@ const OUTDIR = join(CWD, "dist");
 const CLIENT_OUTDIR = join(OUTDIR, "client");
 const CONTENT_FILEPATH = join(CWD, "content.js");
 const FALLBACK_FILEPATH = join(CWD, "fallback.js");
+const BUILD_FILEPATH = join(process.cwd(), "build.js");
 
 const entryPoints = [];
 if (existsSync(CONTENT_FILEPATH)) {
@@ -24,13 +25,27 @@ if (existsSync(FALLBACK_FILEPATH)) {
   entryPoints.push(FALLBACK_FILEPATH);
 }
 
+// support user defined plugins via a build.js file
+const plugins = [wrapComponentsPlugin({ name: NAME, hydrate: MODE === "hydrate" }), minifyHTMLLiteralsPlugin()];
+if (existsSync(BUILD_FILEPATH)) {
+  try {
+    const userDefinedBuild = (await import(BUILD_FILEPATH)).default;
+    const userDefinedPlugins = await userDefinedBuild({ config });
+    if (Array.isArray(userDefinedPlugins)) {
+      plugins.unshift(...userDefinedPlugins);
+    }
+  } catch(err) {
+    // noop
+  }
+}
+
 /**
  * Build a client side bundle into dist/client unless app.mode has been set to ssr-only,
  * in which case, no client side code is needed.
  */
 if (MODE !== "ssr-only") {
   await esbuild.build({
-    plugins: [wrapComponentsPlugin({ name: NAME, hydrate: MODE === "hydrate" }), minifyHTMLLiteralsPlugin()],
+    plugins,
     entryPoints,
     bundle: true,
     format: "esm",

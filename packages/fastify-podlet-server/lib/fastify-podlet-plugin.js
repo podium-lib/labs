@@ -18,12 +18,15 @@ import compress from "@fastify/compress";
 /**
  * TODO:
  * - localisation
+ * - publish mode
+ * - TS support
  */
 
 const renderModes = {
   SSR_ONLY: "ssr-only",
   CSR_ONLY: "csr-only",
   HYDRATE: "hydrate",
+  // PUBLISH: "publish",
 };
 
 const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
