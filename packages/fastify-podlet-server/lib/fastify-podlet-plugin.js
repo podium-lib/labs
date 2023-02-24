@@ -15,10 +15,10 @@ import { minifyHTMLLiteralsPlugin } from "esbuild-plugin-minify-html-literals";
 
 /**
  * TODO:
- * - user token middleware (existing but...) how do we handle multiple marketplaces?
+ * - remove eik, make paths configurable
  * - logging
- * - process exception handlers (existing)
- * - timing (existing)
+ * - compression middleware
+ * - localisation
  */
 
 const renderModes = {
@@ -30,23 +30,11 @@ const renderModes = {
 const defaults = {
   grace: 4000,
   processExceptionHandlers: true,
-  readyChecks: {
-    ready: true,
-    livePathname: "/_/health",
-    readyPathname: "/_/ready",
-  },
-  token: {
-    env: "dev",
-    admin: false,
-    backoffice: false,
-    ttl: 60,
-    host: "thrift.svc.dev.finn.no:7100",
-  },
   timing: {
     timeAllRoutes: false,
     groupStatusCodes: true,
   },
-  renderMode: "hydrate",
+  renderMode: renderModes.HYDRATE,
 };
 
 /**
@@ -66,14 +54,12 @@ const defaults = {
  *  timing?: { timeAllRoutes: boolean, groupStatusCodes: boolean }
  * }} opts
  */
-const plugin = async function nmpPlugin(fastify, opts) {
+const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
   const { processExceptionHandlers, renderMode } = {
     ...defaults,
     ...opts,
   };
   const grace = opts.grace ? opts.grace : opts.development ? 0 : defaults.grace;
-  // @ts-ignore
-  // const token = { ...defaults.token, ...opts.token };
   const timing = { ...defaults.timing, ...opts.timing };
 
   const metricStreams = [];
