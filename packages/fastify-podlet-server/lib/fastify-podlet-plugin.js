@@ -12,11 +12,12 @@ import fastifyPodletPlugin from "@podium/fastify-podlet";
 import ProcessExceptionHandlers from "./process-exception-handlers.js";
 import esbuild from "esbuild";
 import { minifyHTMLLiteralsPlugin } from "esbuild-plugin-minify-html-literals";
+import Metrics from "@metrics/client";
+import { SemVer } from "semver";
 
 /**
  * TODO:
  * - remove eik, make paths configurable
- * - logging
  * - compression middleware
  * - localisation
  */
@@ -27,40 +28,24 @@ const renderModes = {
   HYDRATE: "hydrate",
 };
 
-const defaults = {
-  grace: 4000,
-  processExceptionHandlers: true,
-  timing: {
-    timeAllRoutes: false,
-    groupStatusCodes: true,
-  },
-  renderMode: renderModes.HYDRATE,
-};
-
-/**
- *
- * @param {import('fastify').FastifyInstance} fastify
- * @param {{
- *  name: string;
- *  version: string;
- *  pathname: string;
- *  content?: string;
- *  manifest?: string;
- *  fallback?: string;
- *  development?: boolean;
- *  grace?: number,
- *  component?: boolean;
- *  renderMode?: string;
- *  timing?: { timeAllRoutes: boolean, groupStatusCodes: boolean }
- * }} opts
- */
-const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
-  const { processExceptionHandlers, renderMode } = {
-    ...defaults,
-    ...opts,
-  };
-  const grace = opts.grace ? opts.grace : opts.development ? 0 : defaults.grace;
-  const timing = { ...defaults.timing, ...opts.timing };
+const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
+  const NAME = config.get("app.name");
+  const VERSION = config.get("podlet.version");
+  const PATHNAME = config.get("podlet.pathname");
+  const MANIFEST = config.get("podlet.manifest");
+  const CONTENT = config.get("podlet.content");
+  const FALLBACK = config.get("podlet.fallback");
+  const DEVELOPMENT = config.get("app.development");
+  const COMPONENT = config.get("app.component");
+  const PROCESS_EXCEPTION_HANDLERS = config.get("app.processExceptionHandlers");
+  const RENDER_MODE = config.get("app.mode");
+  const GRACE = config.get("app.grace");
+  const METRICS_ENABLED = config.get("metrics.enabled");
+  const TIMING_METRICS = config.get("metrics.timing.enabled");
+  const TIME_ALL_ROUTES = config.get("metrics.timing.timeAllRoutes");
+  const GROUP_STATUS_CODES = config.get("metrics.timing.groupStatusCodes");
+  const PACKAGE_JSON = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), { encoding: "utf8" }));
+  const PODIUM_VERSION = new SemVer(PACKAGE_JSON.dependencies["@podium/podlet"].replace("^", "").replace("~", ""));
 
   const metricStreams = [];
 
@@ -70,13 +55,13 @@ const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
   } catch (err) {}
 
   const podlet = new Podlet({
-    name: opts.name,
-    version: opts.version,
-    pathname: opts.pathname,
-    manifest: opts.manifest,
-    content: opts.content,
-    fallback: opts.fallback,
-    development: opts.development,
+    name: NAME,
+    version: VERSION,
+    pathname: PATHNAME,
+    manifest: MANIFEST,
+    content: CONTENT,
+    fallback: FALLBACK,
+    development: DEVELOPMENT,
     logger: fastify.log,
   });
 
@@ -84,7 +69,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
   fastify.decorate("proxy", podlet.proxy.bind(podlet));
 
   const eik = new EikClient({
-    development: opts.development,
+    development: DEVELOPMENT,
     base: "/static",
   });
 
@@ -92,16 +77,16 @@ const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
 
   // await fastify.register(compress, { global: true });
 
-  if (opts.development) {
+  if (DEVELOPMENT) {
     fastify.register(fastifyStatic, {
       root: join(process.cwd(), "dist"),
       prefix: "/static/",
     });
   }
 
-  if (processExceptionHandlers) {
+  if (PROCESS_EXCEPTION_HANDLERS) {
     const procExp = new ProcessExceptionHandlers(fastify.log);
-    procExp.closeOnExit(fastify, { grace });
+    procExp.closeOnExit(fastify, { grace: GRACE });
     metricStreams.push(procExp.metrics);
   }
 
@@ -115,23 +100,26 @@ const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
     name: "active_podlet",
     description: "Indicates if a podlet is mounted and active",
     // TODO: read this value from podium package.json
-    labels: { podium_version: 4, podlet_name: opts.name },
+    labels: { podium_version: PODIUM_VERSION.major, podlet_name: NAME },
   });
   setImmediate(() => gauge.set(1));
 
   // manifest route
   // @ts-ignore
-  fastify.get(join("/", opts.name || "", podlet.manifest()), async (req, reply) => {
+  fastify.get(join("/", NAME || "", podlet.manifest()), async (req, reply) => {
+    // enable timing metrics for this route
+    reply.context.config.timing = true;
+
     return JSON.stringify(podlet);
   });
 
-  if (timing) {
-    const responseTiming = new ResponseTiming(timing);
+  if (TIMING_METRICS) {
+    const responseTiming = new ResponseTiming({ timeAllRoutes: TIME_ALL_ROUTES, groupStatusCodes: GROUP_STATUS_CODES });
     fastify.register(responseTiming.plugin());
     metricStreams.push(responseTiming.metrics);
   }
 
-  if (!opts.component) return;
+  if (!COMPONENT) return;
 
   /**
    * setContentState function
@@ -234,13 +222,12 @@ const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
     const outdir = join(process.cwd(), "dist", "server");
 
     // if already defined from a previous request, delete from registry
-    if (customElements.get(`${opts.name}-${type}`)) {
-
+    if (customElements.get(`${NAME}-${type}`)) {
       // if in production mode and the component has already been defined,
       // no more work is needed, so we bail early
-      if (!opts.development) return;
+      if (!DEVELOPMENT) return;
       // @ts-ignore
-      customElements.__definitions.delete(`${opts.name}-${type}`);
+      customElements.__definitions.delete(`${NAME}-${type}`);
     }
 
     // import cache breaking filename using date string
@@ -253,9 +240,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
           format: "esm",
           outdir,
           minify: true,
-          plugins: [
-            minifyHTMLLiteralsPlugin()
-          ],
+          plugins: [minifyHTMLLiteralsPlugin()],
           legalComments: `none`,
           platform: "node",
           sourcemap: true,
@@ -264,9 +249,9 @@ const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
         const Element = (await import(ssrfile)).default;
 
         // define newly imported custom element in the registry
-        customElements.define(`${opts.name}-${type}`, Element);
-      } catch(err) {
-        console.log(err)
+        customElements.define(`${NAME}-${type}`, Element);
+      } catch (err) {
+        fastify.log.error(err);
       }
     }
   };
@@ -274,11 +259,13 @@ const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
   fastify.decorateReply("hydrate", async function hydrate(template, file) {
     this.type("text/html");
     await importComponentForSSR(join(process.cwd(), file));
-    
+
     const markup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
     // @ts-ignore
     this.podiumSend(
-      `${markup}<script>${dsdPolyfill}</script><script type="module" src="${eik.file(`/client/${file}`).value}"></script>`
+      `${markup}<script>${dsdPolyfill}</script><script type="module" src="${
+        eik.file(`/client/${file}`).value
+      }"></script>`
     );
   });
 
@@ -293,18 +280,14 @@ const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
   fastify.decorateReply("csrOnly", function csrOnly(template, file) {
     this.type("text/html");
     // @ts-ignore
-    this.podiumSend(
-      `${template}<script type="module" src="${
-        eik.file(`/client/${file}`).value
-      }"></script>`
-    );
+    this.podiumSend(`${template}<script type="module" src="${eik.file(`/client/${file}`).value}"></script>`);
   });
 
   if (existsSync(join(process.cwd(), "content.js"))) {
     // if in development mode redirect root to content route
-    if (opts.development) {
+    if (DEVELOPMENT) {
       fastify.get("/", (request, reply) => {
-        reply.redirect(join("/", opts.name || "", podlet.content()));
+        reply.redirect(join("/", NAME || "", podlet.content()));
       });
     }
 
@@ -318,16 +301,19 @@ const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
 
     // builds content route path out of root + app name + the content path value in the podlet manifest
     // by default this will be / + folder name + / eg. /my-podlet/
-    const contentRoutePath = join("/", opts.name || "", podlet.content());
+    const contentRoutePath = join("/", NAME || "", podlet.content());
     // content route
     fastify.get(contentRoutePath, contentOptions, async (req, reply) => {
+      // enable timing metrics for this route
+      reply.context.config.timing = true;
+
       const initialState = JSON.stringify(
         // @ts-ignore
         (await setContentState(req, reply.app.podium.context)) || ""
       );
-      const template = `<${opts.name}-content initial-state='${initialState}'></${opts.name}-content>`;
+      const template = `<${NAME}-content initial-state='${initialState}'></${NAME}-content>`;
 
-      switch (renderMode) {
+      switch (RENDER_MODE) {
         case renderModes.SSR_ONLY:
           // @ts-ignore
           reply.ssrOnly(template, "content.js");
@@ -344,9 +330,9 @@ const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
     });
   } else {
     // if in development mode and no content route is defined, redirect root to manifest route
-    if (opts.development) {
+    if (DEVELOPMENT) {
       fastify.get("/", (request, reply) => {
-        reply.redirect(join("/", opts.name || "", podlet.manifest()));
+        reply.redirect(join("/", NAME || "", podlet.manifest()));
       });
     }
   }
@@ -362,15 +348,18 @@ const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
 
     // builds fallback route path out of root + app name + the fallback path value in the podlet manifest
     // by default this will be / + folder name + /fallback eg. /my-podlet/fallback
-    const fallbackRoutePath = join("/", opts.name || "", podlet.fallback());
+    const fallbackRoutePath = join("/", NAME || "", podlet.fallback());
     // fallback route
     fastify.get(fallbackRoutePath, fallbackOptions, async (req, reply) => {
+      // enable timing metrics for this route
+      reply.context.config.timing = true;
+
       const initialState = JSON.stringify(
         // @ts-ignore
         (await setFallbackState(req, reply.app.podium.context)) || ""
       );
-      const template = `<${opts.name}-fallback initial-state='${initialState}'></${opts.name}-fallback>`;
-      switch (renderMode) {
+      const template = `<${NAME}-fallback initial-state='${initialState}'></${NAME}-fallback>`;
+      switch (RENDER_MODE) {
         case renderModes.SSR_ONLY:
           // @ts-ignore
           reply.ssrOnly(template, "fallback.js");
@@ -385,6 +374,17 @@ const plugin = async function fastifyPodletServerPlugin(fastify, opts) {
           break;
       }
     });
+  }
+
+  if (METRICS_ENABLED) {
+    const metrics = new Metrics();
+    for (const stream of metricStreams) {
+      stream.on("error", (err) => {
+        fastify.log.error(err);
+      });
+      stream.pipe(metrics);
+    }
+    fastify.decorate("metrics", metrics);
   }
 };
 

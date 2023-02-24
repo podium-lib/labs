@@ -57,6 +57,11 @@ export const schema = {
       format: Number,
       default: 0,
     },
+    processExceptionHandlers: {
+      doc: "Use built in process exception handlers",
+      format: Boolean,
+      default: true,
+    },
   },
   podlet: {
     pathname: {
@@ -86,6 +91,30 @@ export const schema = {
       default: "",
     },
   },
+  metrics: {
+    timing: {
+      timeAllRoutes: {
+        doc: "Collect timing metrics for all routes",
+        format: Boolean,
+        default: false,
+      },
+      groupStatusCodes: {
+        doc: "Group status codes for collected timing metrics",
+        format: Boolean,
+        default: true,
+      },
+      enabled: {
+        doc: "Enable/disable timing metrics collection",
+        format: Boolean,
+        default: true,
+      }
+    },
+    enabled: {
+      doc: "Enable/disable metrics collection",
+      format: Boolean,
+      default: true,
+    }
+  }
 };
 
 export const formats = {

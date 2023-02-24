@@ -8,18 +8,7 @@ import config from "../lib/config.js";
 
 const app = fastify({ logger: true, ignoreTrailingSlash: true });
 
-app.register(fastifyPodletPlugin, {
-  name: /** @type {string} */ (/** @type {unknown} */ (config.get("app.name"))),
-  version: config.get("podlet.version"),
-  pathname: config.get("podlet.pathname"),
-  manifest: config.get("podlet.manifest"),
-  content: config.get("podlet.content"),
-  fallback: config.get("podlet.fallback"),
-  development: config.get("app.development"),
-  component: config.get("app.component"),
-  renderMode: config.get("app.mode"),
-  grace: config.get("app.grace")
-});
+app.register(fastifyPodletPlugin, { config });
 
 /** @type {any} */
 let fastifyApp = app;

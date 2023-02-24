@@ -80,17 +80,7 @@ const started = await start({
   logger: LOGGER,
   // @ts-ignore
   app: (app, opts, done) => {
-    app.register(fastifyPodletPlugin, {
-      name: NAME,
-      version: config.get("podlet.version"),
-      pathname: config.get("podlet.pathname"),
-      manifest: config.get("podlet.manifest"),
-      content: config.get("podlet.content"),
-      fallback: config.get("podlet.fallback"),
-      development: config.get("app.development"),
-      component: config.get("app.component"),
-      renderMode: config.get("app.mode"),
-    });
+    app.register(fastifyPodletPlugin, { config });
 
     // register user provided plugin using sandbox to enable reloading
     if (existsSync(SERVER_FILEPATH)) {
