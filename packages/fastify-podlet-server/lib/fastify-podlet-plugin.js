@@ -46,13 +46,9 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   const GROUP_STATUS_CODES = config.get("metrics.timing.groupStatusCodes");
   const PACKAGE_JSON = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), { encoding: "utf8" }));
   const PODIUM_VERSION = new SemVer(PACKAGE_JSON.dependencies["@podium/podlet"].replace("^", "").replace("~", ""));
+  const DSD_POLYFILL = readFileSync(new URL("./dsd-polyfill.js", import.meta.url), { encoding: "utf8" });
 
   const metricStreams = [];
-
-  let dsdPolyfill = "";
-  try {
-    dsdPolyfill = readFileSync(new URL("./dsd-polyfill.js", import.meta.url), { encoding: "utf8" });
-  } catch (err) {}
 
   const podlet = new Podlet({
     name: NAME,
@@ -267,7 +263,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     const markup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
     // @ts-ignore
     this.podiumSend(
-      `${markup}<script>${dsdPolyfill}</script><script type="module" src="${
+      `${markup}<script>${DSD_POLYFILL}</script><script type="module" src="${
         eik.file(`/client/${file}`).value
       }"></script>`
     );
@@ -278,7 +274,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     await importComponentForSSR(join(process.cwd(), file));
     const markup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
     // @ts-ignore
-    this.podiumSend(`${markup}<script>${dsdPolyfill}</script>`);
+    this.podiumSend(`${markup}<script>${DSD_POLYFILL}</script>`);
   });
 
   fastify.decorateReply("csrOnly", async function csrOnly(template, file) {
