@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { minifyHTMLLiterals } from 'minify-html-literals';
 
 const CONTENT_FILTER = /content\.js$/;
 const FALLBACK_FILTER = /fallback\.js$/;
@@ -18,13 +19,23 @@ export default function wrapComponents({ name, hydrate = true, livereload = fals
     setup(build) {
       build.onLoad({ filter: CONTENT_FILTER }, async (args) => {
         const input = await readFile(args.path, "utf8");
-        const contents = `${hydratePrefix}${input};customElements.define("${name}-content",Content);${livereloadSuffix}`;
-        return { contents };
+        const contents = `
+          ${hydratePrefix}
+          ${input};
+          window.customElements.define("${name}-content",Content);
+          ${livereloadSuffix}
+        `;
+        return { contents: minifyHTMLLiterals(contents)?.code };
       });
       build.onLoad({ filter: FALLBACK_FILTER }, async (args) => {
         const input = await readFile(args.path, "utf8");
-        const contents = `${hydratePrefix}${input};customElements.define("${name}-fallback",Fallback);${livereloadSuffix}`;
-        return { contents };
+        const contents = `
+          ${hydratePrefix}
+          ${input};
+          window.customElements.define("${name}-fallback",Fallback);
+          ${livereloadSuffix}
+        `;
+        return { contents: minifyHTMLLiterals(contents)?.code };
       });
     },
   };
