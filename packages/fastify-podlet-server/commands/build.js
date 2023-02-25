@@ -7,15 +7,16 @@ import esbuild from "esbuild";
 import { minifyHTMLLiteralsPlugin } from "esbuild-plugin-minify-html-literals";
 import config from "../lib/config.js";
 import wrapComponentsPlugin from "../lib/esbuild-wrap-components-plugin.js";
+import resolve from "../lib/resolve.js";
 
 const NAME = /** @type {string} */ (/** @type {unknown} */ (config.get("app.name")));
 const MODE = config.get("app.mode");
 const CWD = process.cwd();
 const OUTDIR = join(CWD, "dist");
 const CLIENT_OUTDIR = join(OUTDIR, "client");
-const CONTENT_FILEPATH = join(CWD, "content.js");
-const FALLBACK_FILEPATH = join(CWD, "fallback.js");
-const BUILD_FILEPATH = join(process.cwd(), "build.js");
+const CONTENT_FILEPATH = await resolve(join(CWD, "content.js"));
+const FALLBACK_FILEPATH = await resolve(join(CWD, "fallback.js"));
+const BUILD_FILEPATH = await resolve(join(process.cwd(), "build.js"));
 
 const entryPoints = [];
 if (existsSync(CONTENT_FILEPATH)) {
@@ -45,6 +46,7 @@ if (existsSync(BUILD_FILEPATH)) {
  */
 if (MODE !== "ssr-only") {
   await esbuild.build({
+    entryNames: "[name]",
     plugins,
     entryPoints,
     bundle: true,

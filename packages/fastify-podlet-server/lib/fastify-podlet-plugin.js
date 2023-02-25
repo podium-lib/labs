@@ -14,6 +14,7 @@ import { minifyHTMLLiteralsPlugin } from "esbuild-plugin-minify-html-literals";
 import Metrics from "@metrics/client";
 import { SemVer } from "semver";
 import compress from "@fastify/compress";
+import resolve from "./resolve.js";
 
 /**
  * TODO:
@@ -236,7 +237,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
           minify: true,
           plugins: [minifyHTMLLiteralsPlugin()],
           legalComments: `none`,
-          platform: "node",
+          // platform: "node",
           sourcemap: true,
         });
         // import fresh copy of the custom element
@@ -250,28 +251,27 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     }
   };
 
-  fastify.decorateReply("hydrate", async function hydrate(template, file) {
+  fastify.decorateReply("hydrate", async function hydrate(template, filepath) {
     this.type("text/html; charset=utf-8");
-    // this.header("content-encoding", "gzip");
     try {
-      await importComponentForSSR(join(process.cwd(), file));
+      await importComponentForSSR(filepath);
     } catch(err) {
       fastify.log.error(err);
     }
 
     const ssrMarkup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
     const polyfillMarkup = `<script>${DSD_POLYFILL}</script>`;
-    const clientSideScript = `<script type="module" src="${`${BASE_PATH}/client/${file}`}"></script>`;
+    const clientSideScript = `<script type="module" src="${`${BASE_PATH}/client/${parse(filepath).name}.js`}"></script>`;
     const markup = fastify.podlet.render(this.app.podium, `${ssrMarkup}${polyfillMarkup}${clientSideScript}`);
 
     // @ts-ignore
     COMPRESSION ? this.compress(markup) : this.send(markup);
   });
 
-  fastify.decorateReply("ssrOnly", async function ssrOnly(template, file) {
+  fastify.decorateReply("ssrOnly", async function ssrOnly(template, filepath) {
     this.type("text/html; charset=utf-8");
     try {
-      await importComponentForSSR(join(process.cwd(), file));
+      await importComponentForSSR(filepath);
     } catch(err) {
       fastify.log.error(err);
     }
@@ -284,16 +284,21 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     COMPRESSION ? this.compress(markup) : this.send(markup);
   });
 
-  fastify.decorateReply("csrOnly", async function csrOnly(template, file) {
+  fastify.decorateReply("csrOnly", async function csrOnly(template, filepath) {
     this.type("text/html; charset=utf-8");
 
-    const clientSideScript = `<script type="module" src="${`${BASE_PATH}/client/${file}`}"></script>`;
+    const clientSideScript = `<script type="module" src="${`${BASE_PATH}/client/${parse(filepath).name}.js`}"></script>`;
     const markup = fastify.podlet.render(this.app.podium, `${template}${clientSideScript}`);
     // @ts-ignore
     COMPRESSION ? this.compress(markup) : this.send(markup);
   });
 
-  if (existsSync(join(process.cwd(), "content.js"))) {
+  const CONTENT_PATH = await resolve(join(process.cwd(), "content.js"));
+  const CONTENT_SCHEMA_PATH = await resolve(join(process.cwd(), "schemas/content.js"))
+  const FALLBACK_PATH = await resolve(join(process.cwd(), "fallback.js"));
+  const FALLBACK_SCHEMA_PATH = await resolve(join(process.cwd(), "schemas/fallback.js"))
+
+  if (existsSync(CONTENT_PATH)) {
     // if in development mode redirect root to content route
     if (DEVELOPMENT) {
       fastify.get("/", (request, reply) => {
@@ -305,8 +310,8 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     // looks for a file named schemas/content.js and if present, imports
     // and provides to route.
     const contentOptions = {};
-    if (existsSync(join(process.cwd(), "schemas/content.js"))) {
-      contentOptions.schema = (await import(join(process.cwd(), "schemas/content.js"))).default;
+    if (existsSync(CONTENT_SCHEMA_PATH)) {
+      contentOptions.schema = (await import(CONTENT_SCHEMA_PATH)).default;
     }
 
     // builds content route path out of root + app name + the content path value in the podlet manifest
@@ -325,15 +330,15 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
       switch (RENDER_MODE) {
         case renderModes.SSR_ONLY:
           // @ts-ignore
-          await reply.ssrOnly(template, "content.js");
+          await reply.ssrOnly(template, CONTENT_PATH);
           break;
         case renderModes.CSR_ONLY:
           // @ts-ignore
-          await reply.csrOnly(template, "content.js");
+          await reply.csrOnly(template, CONTENT_PATH);
           break;
         case renderModes.HYDRATE:
           // @ts-ignore
-          await reply.hydrate(template, "content.js");
+          await reply.hydrate(template, CONTENT_PATH);
           break;
         }
       return reply
@@ -347,13 +352,13 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     }
   }
 
-  if (existsSync(join(process.cwd(), "fallback.js"))) {
+  if (existsSync(FALLBACK_PATH)) {
     // register user defined validation schema for route if provided
     // looks for a file named schemas/fallback.js and if present, imports
     // and provides to route.
     const fallbackOptions = {};
-    if (existsSync(join(process.cwd(), "schemas/fallback.js"))) {
-      fallbackOptions.schema = (await import(join(process.cwd(), "schemas/fallback.js"))).default;
+    if (existsSync(FALLBACK_SCHEMA_PATH)) {
+      fallbackOptions.schema = (await import(FALLBACK_SCHEMA_PATH)).default;
     }
 
     // builds fallback route path out of root + app name + the fallback path value in the podlet manifest
@@ -371,15 +376,15 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
       switch (RENDER_MODE) {
         case renderModes.SSR_ONLY:
           // @ts-ignore
-          await reply.ssrOnly(template, "fallback.js");
+          await reply.ssrOnly(template, FALLBACK_PATH);
           break;
         case renderModes.CSR_ONLY:
           // @ts-ignore
-          await reply.csrOnly(template, "fallback.js");
+          await reply.csrOnly(template, FALLBACK_PATH);
           break;
         case renderModes.HYDRATE:
           // @ts-ignore
-          await reply.hydrate(template, "fallback.js");
+          await reply.hydrate(template, FALLBACK_PATH);
           break;
       }
       return reply;

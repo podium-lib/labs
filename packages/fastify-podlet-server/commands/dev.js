@@ -11,6 +11,7 @@ import { start } from "@fastify/restartable";
 import config from "../lib/config.js";
 import fastifyPodletPlugin from "../lib/fastify-podlet-plugin.js";
 import wrapComponentsPlugin from "../lib/esbuild-wrap-components-plugin.js";
+import resolve from "../lib/resolve.js";
 
 const LOGGER = pino({
   transport: {
@@ -26,10 +27,10 @@ const MODE = config.get("app.mode");
 const CWD = process.cwd();
 const OUTDIR = join(CWD, "dist");
 const CLIENT_OUTDIR = join(OUTDIR, "client");
-const CONTENT_FILEPATH = join(CWD, "content.js");
-const FALLBACK_FILEPATH = join(CWD, "fallback.js");
-const SERVER_FILEPATH = join(process.cwd(), "server.js");
-const BUILD_FILEPATH = join(process.cwd(), "build.js");
+const CONTENT_FILEPATH = await resolve(join(CWD, "content.js"));
+const FALLBACK_FILEPATH = await resolve(join(CWD, "fallback.js"));
+const SERVER_FILEPATH = await resolve(join(CWD, "server.js"));
+const BUILD_FILEPATH = await resolve(join(CWD, "build.js"));
 
 const entryPoints = [];
 if (existsSync(CONTENT_FILEPATH)) {
@@ -110,7 +111,7 @@ const started = await start({
 
 // Chokidar provides super fast native file system watching
 // of server files. Either server.js or any js files inside a server folder
-const serverWatcher = chokidar.watch(["server.js", "server/**/*.js"], {
+const serverWatcher = chokidar.watch([SERVER_FILEPATH, "server/**/*"], {
   persistent: true,
   followSymlinks: false,
   cwd: process.cwd(),
