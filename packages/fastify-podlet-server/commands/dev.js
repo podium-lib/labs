@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import chokidar from "chokidar";
 import { context } from "esbuild";
-import { minifyHTMLLiteralsPlugin } from "esbuild-plugin-minify-html-literals";
 import pino from "pino";
 import sandbox from "fastify-sandbox";
 import { start } from "@fastify/restartable";
@@ -43,7 +42,6 @@ if (existsSync(FALLBACK_FILEPATH)) {
 // support user defined plugins via a build.js file
 const plugins = [
   wrapComponentsPlugin({ name: NAME, hydrate: MODE === "hydrate", livereload: true }),
-  minifyHTMLLiteralsPlugin(),
 ];
 if (existsSync(BUILD_FILEPATH)) {
   try {
@@ -61,6 +59,7 @@ if (existsSync(BUILD_FILEPATH)) {
 // can optimally rebundle whenever files change
 const buildContext = await context({
   entryPoints,
+  entryNames: "[name]",
   bundle: true,
   format: "esm",
   outdir: CLIENT_OUTDIR,
@@ -72,7 +71,7 @@ const buildContext = await context({
 });
 
 // Chokidar provides super fast native file system watching
-const clientWatcher = chokidar.watch(["content.js", "fallback.js", "client/**/*.js"], {
+const clientWatcher = chokidar.watch(["content.*", "fallback.*", "client/**/*"], {
   persistent: true,
   followSymlinks: false,
   cwd: process.cwd(),
@@ -80,6 +79,7 @@ const clientWatcher = chokidar.watch(["content.js", "fallback.js", "client/**/*.
 
 // rebuild the client side bundle whenever a client side related file changes
 clientWatcher.on("change", async () => {
+  console.log('file change')
   await buildContext.rebuild();
 });
 
@@ -89,7 +89,7 @@ clientWatcher.on("change", async () => {
 await buildContext.serve({ port: 6935 });
 
 // Build the bundle for the first time
-await buildContext.rebuild();
+// await buildContext.rebuild();
 
 // Create and start a development server
 const started = await start({
@@ -111,7 +111,7 @@ const started = await start({
 
 // Chokidar provides super fast native file system watching
 // of server files. Either server.js or any js files inside a server folder
-const serverWatcher = chokidar.watch([SERVER_FILEPATH, "server/**/*"], {
+const serverWatcher = chokidar.watch(["server.*", "server/**/*"], {
   persistent: true,
   followSymlinks: false,
   cwd: process.cwd(),

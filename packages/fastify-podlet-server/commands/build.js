@@ -27,7 +27,7 @@ if (existsSync(FALLBACK_FILEPATH)) {
 }
 
 // support user defined plugins via a build.js file
-const plugins = [wrapComponentsPlugin({ name: NAME, hydrate: MODE === "hydrate" }), minifyHTMLLiteralsPlugin()];
+const plugins = [wrapComponentsPlugin({ name: NAME, hydrate: MODE === "hydrate" })];
 if (existsSync(BUILD_FILEPATH)) {
   try {
     const userDefinedBuild = (await import(BUILD_FILEPATH)).default;

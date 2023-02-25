@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { minifyHTMLLiterals } from 'minify-html-literals';
 
-const CONTENT_FILTER = /content\.js$/;
-const FALLBACK_FILTER = /fallback\.js$/;
+const CONTENT_FILTER = /content\.(ts|js)$/;
+const FALLBACK_FILTER = /fallback\.(ts|js)$/;
 
 /**
  * ESBuild plugin that loads content.js and fallback.js and wraps them with
