@@ -4,7 +4,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import esbuild from "esbuild";
-import { minifyHTMLLiteralsPlugin } from "esbuild-plugin-minify-html-literals";
 import config from "../lib/config.js";
 import wrapComponentsPlugin from "../lib/esbuild-wrap-components-plugin.js";
 import resolve from "../lib/resolve.js";
