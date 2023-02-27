@@ -34,7 +34,6 @@
     "chokidar": "^3.5.3",
     "convict": "^6.2.4",
     "esbuild": "^0.17.6",
-    "esbuild-plugin-minify-html-literals": "^1.0.2",
     "fastify-metrics-js-prometheus": "^4.0.0",
     "fastify-metrics-js-response-timing": "^3.0.0",
     "fastify-plugin": "^4.5.0",

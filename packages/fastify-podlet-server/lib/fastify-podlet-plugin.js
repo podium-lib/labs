@@ -1,5 +1,7 @@
+import { createRequire } from "node:module";
 import { existsSync, readFileSync } from "node:fs";
-import { join, basename, parse } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join, parse } from "node:path";
 import ResponseTiming from "fastify-metrics-js-response-timing";
 import fp from "fastify-plugin";
 import { html } from "lit";
@@ -10,11 +12,12 @@ import Podlet from "@podium/podlet";
 import fastifyPodletPlugin from "@podium/fastify-podlet";
 import ProcessExceptionHandlers from "./process-exception-handlers.js";
 import esbuild from "esbuild";
-import { minifyHTMLLiteralsPlugin } from "esbuild-plugin-minify-html-literals";
 import Metrics from "@metrics/client";
 import { SemVer } from "semver";
 import compress from "@fastify/compress";
 import resolve from "./resolve.js";
+
+const require = createRequire(import.meta.url);
 
 /**
  * TODO:
@@ -38,6 +41,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   const CONTENT = config.get("podlet.content");
   const FALLBACK = config.get("podlet.fallback");
   const DEVELOPMENT = config.get("app.development");
+  const ASSETS_DEVELOPMENT = config.get("assets.development");
   const COMPONENT = config.get("app.component");
   const PROCESS_EXCEPTION_HANDLERS = config.get("app.processExceptionHandlers");
   const RENDER_MODE = config.get("app.mode");
@@ -226,22 +230,22 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     }
 
     // import cache breaking filename using date string
-    const ssrfile = join(outdir, `${basename(filepath)}?s=${Date.now()}`);
+    const outfile = join(outdir, `${type}.js`);
     if (existsSync(filepath)) {
       try {
         await esbuild.build({
           entryPoints: [filepath],
           bundle: true,
           format: "esm",
-          outdir,
+          outfile,
           minify: true,
-          plugins: [minifyHTMLLiteralsPlugin()],
+          plugins: [],
           legalComments: `none`,
-          // platform: "node",
           sourcemap: true,
+          external: ["lit"],
         });
         // import fresh copy of the custom element
-        const Element = (await import(ssrfile)).default;
+        const Element = (await import(`${outfile}?s=${Date.now()}`)).default;
 
         // define newly imported custom element in the registry
         customElements.define(`${NAME}-${type}`, Element);
@@ -252,27 +256,82 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   };
 
   fastify.decorateReply("hydrate", async function hydrate(template, filepath) {
+    const { name } = parse(filepath);
     this.type("text/html; charset=utf-8");
     try {
       await importComponentForSSR(filepath);
-    } catch(err) {
+    } catch (err) {
       fastify.log.error(err);
     }
 
+    // user provided markup, SSR'd
     const ssrMarkup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
+    // polyfill for browsers that don't support declarative shadow dom
     const polyfillMarkup = `<script>${DSD_POLYFILL}</script>`;
-    const clientSideScript = `<script type="module" src="${`${BASE_PATH}/client/${parse(filepath).name}.js`}"></script>`;
+    // live reload snippet that connects to esbuild server and listens for rebuilds and reloads page.
+    const livereloadSnippet = ASSETS_DEVELOPMENT
+      ? `new EventSource('http://localhost:6935/esbuild').addEventListener('change',()=>location.reload());`
+      : "";
+    // wrap user provided component in hydration support and live reload snippet and define component in registry
+    let clientSideScript;
+
+    if (ASSETS_DEVELOPMENT) {
+      clientSideScript = `
+        <script type="module">
+          import '/node_modules/lit/experimental-hydrate-support.js';
+          import El from '${BASE_PATH}/client/${name}.js';
+          customElements.define("${NAME}-${name}",El);
+          ${livereloadSnippet}
+        </script>
+      `;
+    } else {
+      // in production, all scripts are bundled into a single file
+      clientSideScript = `<script type="module" src="${BASE_PATH}/client/${name}.js"></script>`;
+    }
+
+    // render final markup
     const markup = fastify.podlet.render(this.app.podium, `${ssrMarkup}${polyfillMarkup}${clientSideScript}`);
 
     // @ts-ignore
     COMPRESSION ? this.compress(markup) : this.send(markup);
   });
 
+  /**
+   * Bundle and serve client side dependencies on the fly, caching build between requests.
+   * Deps can be requested via /node_modules/{dependency name}
+   * eg. /node_modules/lit/experimental-hydration-support.js
+   */
+  if (ASSETS_DEVELOPMENT) {
+    const cache = new Map();
+    fastify.get("/node_modules/*", async (request, reply) => {
+      reply.type("application/javascript");
+      const depname = request.params["*"];
+      if (!cache.has(depname)) {
+        const filepath = require.resolve(depname);
+        const outdir = join(process.cwd(), "dist", "server");
+        const outfile = join(outdir, depname);
+        await esbuild.build({
+          entryPoints: [filepath],
+          bundle: true,
+          format: "esm",
+          outfile,
+          minify: true,
+          sourcemap: false,
+        });
+        const contents = await readFile(outfile, { encoding: "utf8" });
+        cache.set(depname, contents);
+      }
+      reply.send(cache.get(depname));
+      // fastify compress needs us to return reply to avoid early stream termination
+      return reply;
+    });
+  }
+
   fastify.decorateReply("ssrOnly", async function ssrOnly(template, filepath) {
     this.type("text/html; charset=utf-8");
     try {
       await importComponentForSSR(filepath);
-    } catch(err) {
+    } catch (err) {
       fastify.log.error(err);
     }
 
@@ -287,16 +346,45 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   fastify.decorateReply("csrOnly", async function csrOnly(template, filepath) {
     this.type("text/html; charset=utf-8");
 
-    const clientSideScript = `<script type="module" src="${`${BASE_PATH}/client/${parse(filepath).name}.js`}"></script>`;
+    const { name } = parse(filepath);
+    this.type("text/html; charset=utf-8");
+    try {
+      await importComponentForSSR(filepath);
+    } catch (err) {
+      fastify.log.error(err);
+    }
+
+    // live reload snippet that connects to esbuild server and listens for rebuilds and reloads page.
+    const livereloadSnippet = ASSETS_DEVELOPMENT
+      ? `new EventSource('http://localhost:6935/esbuild').addEventListener('change',()=>location.reload());`
+      : "";
+    // wrap user provided component in hydration support and live reload snippet and define component in registry
+    let clientSideScript;
+
+    if (ASSETS_DEVELOPMENT) {
+      clientSideScript = `
+        <script type="module">
+          import El from '${BASE_PATH}/client/${name}.js';
+          customElements.define("${NAME}-${name}",El);
+          ${livereloadSnippet}
+        </script>
+      `;
+    } else {
+      // in production, all scripts are bundled into a single file
+      clientSideScript = `<script type="module" src="${BASE_PATH}/client/${name}.js"></script>`;
+    }
+
+    // render final markup
     const markup = fastify.podlet.render(this.app.podium, `${template}${clientSideScript}`);
+
     // @ts-ignore
     COMPRESSION ? this.compress(markup) : this.send(markup);
   });
 
   const CONTENT_PATH = await resolve(join(process.cwd(), "content.js"));
-  const CONTENT_SCHEMA_PATH = await resolve(join(process.cwd(), "schemas/content.js"))
+  const CONTENT_SCHEMA_PATH = await resolve(join(process.cwd(), "schemas/content.js"));
   const FALLBACK_PATH = await resolve(join(process.cwd(), "fallback.js"));
-  const FALLBACK_SCHEMA_PATH = await resolve(join(process.cwd(), "schemas/fallback.js"))
+  const FALLBACK_SCHEMA_PATH = await resolve(join(process.cwd(), "schemas/fallback.js"));
 
   if (existsSync(CONTENT_PATH)) {
     // if in development mode redirect root to content route
@@ -340,8 +428,8 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
           // @ts-ignore
           await reply.hydrate(template, CONTENT_PATH);
           break;
-        }
-      return reply
+      }
+      return reply;
     });
   } else {
     // if in development mode and no content route is defined, redirect root to manifest route

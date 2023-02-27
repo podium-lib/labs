@@ -9,8 +9,9 @@ import sandbox from "fastify-sandbox";
 import { start } from "@fastify/restartable";
 import config from "../lib/config.js";
 import fastifyPodletPlugin from "../lib/fastify-podlet-plugin.js";
-import wrapComponentsPlugin from "../lib/esbuild-wrap-components-plugin.js";
 import resolve from "../lib/resolve.js";
+
+config.set("assets.development", true);
 
 const LOGGER = pino({
   transport: {
@@ -21,8 +22,7 @@ const LOGGER = pino({
     },
   },
 });
-const NAME = /** @type {string} */ (/** @type {unknown} */ (config.get("app.name")));
-const MODE = config.get("app.mode");
+
 const CWD = process.cwd();
 const OUTDIR = join(CWD, "dist");
 const CLIENT_OUTDIR = join(OUTDIR, "client");
@@ -40,9 +40,7 @@ if (existsSync(FALLBACK_FILEPATH)) {
 }
 
 // support user defined plugins via a build.js file
-const plugins = [
-  wrapComponentsPlugin({ name: NAME, hydrate: MODE === "hydrate", livereload: true }),
-];
+const plugins = [];
 if (existsSync(BUILD_FILEPATH)) {
   try {
     const userDefinedBuild = (await import(BUILD_FILEPATH)).default;
@@ -50,7 +48,7 @@ if (existsSync(BUILD_FILEPATH)) {
     if (Array.isArray(userDefinedPlugins)) {
       plugins.unshift(...userDefinedPlugins);
     }
-  } catch(err) {
+  } catch (err) {
     // noop
   }
 }
@@ -79,7 +77,6 @@ const clientWatcher = chokidar.watch(["content.*", "fallback.*", "client/**/*"],
 
 // rebuild the client side bundle whenever a client side related file changes
 clientWatcher.on("change", async () => {
-  console.log('file change')
   await buildContext.rebuild();
 });
 

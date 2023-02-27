@@ -112,30 +112,33 @@ export const schema = {
         doc: "Enable/disable timing metrics collection",
         format: Boolean,
         default: true,
-      }
+      },
     },
     enabled: {
       doc: "Enable/disable metrics collection",
       format: Boolean,
       default: true,
-    }
+    },
   },
   assets: {
     base: {
       doc: "Base path or URL for assets. Eg. /static or https://assets.cdn.com/static. Locally this is files in the dist folder. DO NOT include trailing slash.",
       format: String,
-      default: "/static"
-    }
-  }
+      default: "/static",
+    },
+    development: {
+      doc: "Asset development mode. When enabled, content and fallback will be wrapped in development scripts. Should be set to false when in production.",
+      format: Boolean,
+      default: false,
+    },
+  },
 };
 
 export const formats = {
   "app-name": {
     validate: function (val) {
       if (!/^[a-z-]*$/.test(val)) {
-        throw new Error(
-          "may only contain lower cases letters and hyphens. (^[a-z-]*$)"
-        );
+        throw new Error("may only contain lower cases letters and hyphens. (^[a-z-]*$)");
       }
     },
   },
