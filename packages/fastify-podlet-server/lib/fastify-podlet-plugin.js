@@ -229,6 +229,21 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
       customElements.__definitions.delete(`${NAME}-${type}`);
     }
 
+    // support user defined plugins via a build.js file
+    const BUILD_FILEPATH = join(process.cwd(), 'build.js');
+    const plugins = [];
+    if (existsSync(BUILD_FILEPATH)) {
+      try {
+        const userDefinedBuild = (await import(BUILD_FILEPATH)).default;
+        const userDefinedPlugins = await userDefinedBuild({ config });
+        if (Array.isArray(userDefinedPlugins)) {
+          plugins.unshift(...userDefinedPlugins);
+        }
+      } catch (err) {
+        // noop
+      }
+    }
+
     // import cache breaking filename using date string
     const outfile = join(outdir, `${type}.js`);
     if (existsSync(filepath)) {
@@ -239,7 +254,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
           format: "esm",
           outfile,
           minify: true,
-          plugins: [],
+          plugins,
           legalComments: `none`,
           sourcemap: true,
           external: ["lit"],
