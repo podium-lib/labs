@@ -23,7 +23,6 @@ const require = createRequire(import.meta.url);
  * TODO:
  * - localisation
  * - publish mode
- * - TS support
  */
 
 const renderModes = {
@@ -69,14 +68,40 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     logger: fastify.log,
   });
 
+  /**
+   * Experimental: decorate the fastify object that is passed to ./server.js with 3 objects.
+   * config and podlet are also injected into the plugin as arguments so this approach isn't strictly necessary
+   * but may be preferable?
+   *
+   * export default function server(fastify) {
+   *  fastify.config.get(...)
+   *  fastify.podlet.proxy(...)
+   *  fastify.proxy(...)
+   * }
+   *
+   * vs
+   *
+   * export default function server(fastify, { config, podlet }) {
+   *   config.get(...)
+   *   config.proxy(...)
+   * }
+   */
   fastify.decorate("config", config);
   fastify.decorate("podlet", podlet);
   fastify.decorate("proxy", podlet.proxy.bind(podlet));
 
+  /**
+   * Compression is included because until we resolve an issue with the layout client,
+   * we need to ensure payloads are relatively small so as not to have the client error.
+   */
   if (COMPRESSION) {
     await fastify.register(compress, { global: true });
   }
 
+  /**
+   * Serve all assets in the dist folder when in development mode
+   * Files are built into the dist folder by either the podlet-dev command or the podlet-build command
+   */
   if (DEVELOPMENT) {
     fastify.register(fastifyStatic, {
       root: join(process.cwd(), "dist"),
@@ -84,17 +109,31 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     });
   }
 
+  /**
+   * Register process exception handlers middleware/plugin
+   * This handles graceful shutdown. In dev mode, grace time is 0 so stopping the server should
+   * happen instantly while in prod we want it to wait for connections to end before shutdown
+   * so the grace period tends to be set to a few seconds.
+   */
   if (PROCESS_EXCEPTION_HANDLERS) {
     const procExp = new ProcessExceptionHandlers(fastify.log);
     procExp.closeOnExit(fastify, { grace: GRACE });
     metricStreams.push(procExp.metrics);
   }
 
+  /**
+   * We register the Podium podlet Fastify plugin here and pass it the podlet
+   * and then collect the metrics
+   */
   // @ts-ignore
   fastify.register(fastifyPodletPlugin, podlet);
   // @ts-ignore
   metricStreams.push(podlet.metrics);
 
+  /**
+   * Generate a metric for which major version of the Podium podlet is being run
+   * Metric is pushed into the podlet metrics stream which is then collected
+   */
   // @ts-ignore
   const gauge = podlet.metrics.gauge({
     name: "active_podlet",
@@ -103,7 +142,18 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   });
   setImmediate(() => gauge.set(1));
 
-  // manifest route
+  /**
+   * ROUTES:
+   * - manifest
+   * - content
+   * - fallback
+   *
+   * Generate routes with appropriate responses
+   */
+
+  /**
+   * Manifest Route
+   */
   // @ts-ignore
   fastify.get(join("/", NAME || "", podlet.manifest()), async (req, reply) => {
     // enable timing metrics for this route
@@ -118,6 +168,10 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     metricStreams.push(responseTiming.metrics);
   }
 
+  /**
+   * If the user has configured the app to not use components, we don't define the content or fallback routes
+   * and leave that to the user to do in their server.js file.
+   */
   if (!COMPONENT) return;
 
   /**
@@ -230,7 +284,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     }
 
     // support user defined plugins via a build.js file
-    const BUILD_FILEPATH = join(process.cwd(), 'build.js');
+    const BUILD_FILEPATH = join(process.cwd(), "build.js");
     const plugins = [];
     if (existsSync(BUILD_FILEPATH)) {
       try {
@@ -270,6 +324,42 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     }
   };
 
+  /**
+   * Bundle and serve client side dependencies on the fly, caching build between requests.
+   * Deps can be requested via /node_modules/{dependency name}
+   *
+   * eg. /node_modules/lit/experimental-hydration-support.js
+   */
+  if (ASSETS_DEVELOPMENT) {
+    const cache = new Map();
+    fastify.get("/node_modules/*", async (request, reply) => {
+      reply.type("application/javascript");
+      const depname = request.params["*"];
+      if (!cache.has(depname)) {
+        const filepath = require.resolve(depname);
+        const outdir = join(process.cwd(), "dist", "server");
+        const outfile = join(outdir, depname);
+        await esbuild.build({
+          entryPoints: [filepath],
+          bundle: true,
+          format: "esm",
+          outfile,
+          minify: true,
+          sourcemap: false,
+        });
+        const contents = await readFile(outfile, { encoding: "utf8" });
+        cache.set(depname, contents);
+      }
+      reply.send(cache.get(depname));
+      // fastify compress needs us to return reply to avoid early stream termination
+      return reply;
+    });
+  }
+
+  /**
+   * Decorates the reply object with a hydrate method that, when used, responds with a SSR's custom element response
+   * and client side javascript necessary to hydrate the server response on the client side.
+   */
   fastify.decorateReply("hydrate", async function hydrate(template, filepath) {
     const { name } = parse(filepath);
     this.type("text/html; charset=utf-8");
@@ -312,36 +402,9 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   });
 
   /**
-   * Bundle and serve client side dependencies on the fly, caching build between requests.
-   * Deps can be requested via /node_modules/{dependency name}
-   * eg. /node_modules/lit/experimental-hydration-support.js
+   * Decorates the reply object with an ssrOnly method that, when used, responds with a SSR'd custom element response
+   * with no client side hydration.
    */
-  if (ASSETS_DEVELOPMENT) {
-    const cache = new Map();
-    fastify.get("/node_modules/*", async (request, reply) => {
-      reply.type("application/javascript");
-      const depname = request.params["*"];
-      if (!cache.has(depname)) {
-        const filepath = require.resolve(depname);
-        const outdir = join(process.cwd(), "dist", "server");
-        const outfile = join(outdir, depname);
-        await esbuild.build({
-          entryPoints: [filepath],
-          bundle: true,
-          format: "esm",
-          outfile,
-          minify: true,
-          sourcemap: false,
-        });
-        const contents = await readFile(outfile, { encoding: "utf8" });
-        cache.set(depname, contents);
-      }
-      reply.send(cache.get(depname));
-      // fastify compress needs us to return reply to avoid early stream termination
-      return reply;
-    });
-  }
-
   fastify.decorateReply("ssrOnly", async function ssrOnly(template, filepath) {
     this.type("text/html; charset=utf-8");
     try {
@@ -358,6 +421,10 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     COMPRESSION ? this.compress(markup) : this.send(markup);
   });
 
+  /**
+   * Decorates the reply object with an csrOnly method that, when used, responds with a custom element's tag markup and
+   * the client side code necessary to define the element. Does not server side render.
+   */
   fastify.decorateReply("csrOnly", async function csrOnly(template, filepath) {
     this.type("text/html; charset=utf-8");
 
@@ -494,6 +561,10 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     });
   }
 
+  /**
+   * Collect up all metrics and expose on a .metrics property of the fastify instance
+   * which can then be piped into a consumer in server.js
+   */
   if (METRICS_ENABLED) {
     const metrics = new Metrics();
     for (const stream of metricStreams) {
