@@ -290,15 +290,6 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     const type = parse(filepath).name;
     const outdir = join(process.cwd(), "dist", "server");
 
-    // if already defined from a previous request, delete from registry
-    if (customElements.get(`${NAME}-${type}`)) {
-      // if in production mode and the component has already been defined,
-      // no more work is needed, so we bail early
-      if (!DEVELOPMENT) return;
-      // @ts-ignore
-      customElements.__definitions.delete(`${NAME}-${type}`);
-    }
-
     // support user defined plugins via a build.js file
     const BUILD_FILEPATH = join(process.cwd(), "build.js");
     const plugins = [];
@@ -331,6 +322,15 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
         });
         // import fresh copy of the custom element
         const Element = (await import(`${outfile}?s=${Date.now()}`)).default;
+
+        // if already defined from a previous request, delete from registry
+        if (customElements.get(`${NAME}-${type}`)) {
+          // if in production mode and the component has already been defined,
+          // no more work is needed, so we bail early
+          if (!DEVELOPMENT) return;
+          // @ts-ignore
+          customElements.__definitions.delete(`${NAME}-${type}`);
+        }
 
         // define newly imported custom element in the registry
         customElements.define(`${NAME}-${type}`, Element);
