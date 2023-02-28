@@ -127,7 +127,7 @@ The signature for the plugin is as follows
 
 ```js
 // server.js
-export function server(fastify, { config, podlet }) {}
+export default async function server(fastify, { config, podlet }) {}
 ```
 
 Notice that an instance of the fastify app, a config object and an instance of the Podium podlet class are all passed into the plugin.
@@ -147,7 +147,7 @@ The same data will be used server side for SSR.
 
 ```js
 // server.js
-export function server(fastify, { config, podlet }) {
+export default async function server(fastify, { config, podlet }) {
   fastify.setContentState(() => ({
     key: "value",
   }));
@@ -171,7 +171,7 @@ You can define additional API routes for use in the client by using the fastify 
 
 ```js
 // server.js
-export function server(fastify, { config, podlet }) {
+export default async function server(fastify, { config, podlet }) {
   // http://localhost:8080/<my-podlet-name>/api
   const pathname = join(config.get("app.name"), "api");
   fastify.get(pathname, async (req, reply) => {
@@ -185,7 +185,7 @@ using `.setContentState`.
 
 ```js
 // server.js
-export function server(fastify, { config, podlet }) {
+export default async function server(fastify, { config, podlet }) {
   fastify.setContentState((request, context) => ({
     api: new URL(`${context.publicPathname}/api`, context.mountOrigin).href,
   }));
@@ -213,7 +213,7 @@ This can be done in server.js using the podlet object like so:
 
 ```js
 // server.js
-export function server(fastify, { config, podlet }) {
+export default async function server(fastify, { config, podlet }) {
   // http://localhost:8080/<my-podlet-name>/api
   const target = join(config.get("app.name"), "api");
   fastify.get(podlet.proxy({ target, name: "api" }), async (req, reply) => {
@@ -230,7 +230,7 @@ There are a plethora of Fastify plugins which can be plugged into the server via
 
 ```js
 // server.js
-export function server(fastify, { config, podlet }) {
+export default async function server(fastify, { config, podlet }) {
   fastify.register(pluginName, options);
 }
 ```
@@ -427,7 +427,7 @@ Under the hood, various metrics are gathered and provided for consumption in ser
 
 ```js
 // server.js
-export function server(fastify, { config, podlet }) {
+export default async function server(fastify, { config, podlet }) {
   // fastify.metrics is a stream that can be piped into a consumer
 }
 ```
