@@ -50,6 +50,108 @@ And visit `http://localhost:8080` in your browser.
 
 You should see the text "This is a demo" in hot pink. This was both rendered server side and also hydrated client side out of the box.
 
+## Folder Structure and File Naming
+
+A podlet server app requires that certain folders and file names conventions are observed in order to work properly.
+In the most basic sense, the app might just consist of a package.json file and a content.js file.
+
+```
+/
+  content.js
+  package.json
+```
+
+Alternatively, an app might features such as config, localisation, additional server files, additional client side files and so on. An app that uses many of these things will look more like this:
+
+```
+/
+  content.js
+  fallback.js
+  server.js
+  build.js
+  package.json
+  /config
+    schema.js
+    common.json
+    domains/
+      localhost/
+        local.config.json
+  /locale
+    en.json
+    no.json
+  /server
+    additional-file1.js
+    additional-file2.js
+  /src
+    additional-file1.js
+    additional-file2.js
+```
+
+### Folders and files, an overview
+
+#### **content.js [required]**
+
+This is the entrypoint for your apps content route. You may import dependencies from node_modules and additional source files from /src
+This file must export a default export which is a LitElement class.
+
+#### **fallback.js [optional]**
+
+This is the entrypoint for your apps fallback route. You may import dependencies from node_modules and additional source files from /src
+This file must export a default export which is a LitElement class.
+
+#### **server.js [optional]**
+
+This is your way to hook into the app server by defining a Fastify plugin.
+You must export the a function that is a Fastify plugin. 
+
+This function must be async 
+
+```js
+export default async function server(fastify, { config, podlet }) {
+  fastify.setContentState(() => ({
+    key: "value",
+  }));
+}
+```
+
+OR call a done callback
+
+```js
+export default function server(fastify, { config, podlet }, done) {
+  fastify.setContentState(() => ({
+    key: "value",
+  }));
+  done();
+}
+```
+
+This file may import packages from node_modules or files from the /server folder
+
+#### **build.js [optional]**
+
+This file can be used to hook into the Esbuild build process. It must export a function as a default function and return an array of Esbuild plugins
+
+```js
+import plugin from 'some-esbuild-plugin';
+export default () => [plugin()];
+```
+
+#### **config [optional]**
+
+This is the folder for configuring the app, see the config section below.
+
+#### **locale [optional]**
+
+This is the folder for adding translation json files, see the section on localisation below.
+
+#### **server [optional]**
+
+This folder is for any additional files you might need to import from `server.js`
+
+#### **src [optional]**
+
+This folder is for any additional files you might need to import from `content.js` or `fallback.js`
+
 ## The App Name
 
 Podlet's must have a name value. This module restricts names to a-z and the - character as in `my-podlet`.
