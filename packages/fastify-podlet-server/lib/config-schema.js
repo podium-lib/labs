@@ -4,12 +4,14 @@ export const schema = {
       doc: "Podlet name. Must match ^[a-z-]*$. Defaults to name in package.json.",
       format: "app-name",
       default: null,
+      env: "APP_NAME"
     },
     env: {
       doc: "Environments",
-      format: ["local", "test", "production"],
+      format: String,
       default: "local",
       arg: "env",
+      env: "ENV"
     },
     domain: {
       doc: "Domain",
@@ -36,13 +38,6 @@ export const schema = {
       format: String,
       default: "en-US",
       env: "LOCALE",
-    },
-    tz: {
-      doc: "Timezone",
-      format: String,
-      default: "localhost",
-      env: "TZ",
-      arg: "tz",
     },
     development: {
       doc: "Development mode",
