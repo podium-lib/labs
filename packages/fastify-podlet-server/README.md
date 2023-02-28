@@ -35,7 +35,7 @@ export default class Content extends PodiumPodletElement {
   `;
 
   render() {
-    return html`<section class=".demo">This is a demo</section>`;
+    return html`<section class="demo">This is a demo</section>`;
   }
 }
 ```
