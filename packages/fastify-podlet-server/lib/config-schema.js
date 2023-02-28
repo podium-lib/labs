@@ -13,7 +13,7 @@ export const schema = {
     },
     domain: {
       doc: "Domain",
-      format: ["localhost", "www.finn.no", "www.tori.fi"],
+      format: String,
       default: "localhost",
       env: "DOMAIN",
       arg: "domain",
@@ -35,6 +35,14 @@ export const schema = {
       doc: "Locale",
       format: String,
       default: "en-US",
+      env: "LOCALE",
+    },
+    tz: {
+      doc: "Timezone",
+      format: String,
+      default: "localhost",
+      env: "TZ",
+      arg: "tz",
     },
     development: {
       doc: "Development mode",

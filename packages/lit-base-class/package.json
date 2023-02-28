@@ -24,5 +24,8 @@
   "homepage": "https://github.com/podium-lib/labs#readme",
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "i18next": "^22.4.10"
   }
 }

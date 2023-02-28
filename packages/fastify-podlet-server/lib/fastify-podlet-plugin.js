@@ -41,6 +41,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   const FALLBACK = config.get("podlet.fallback");
   const DEVELOPMENT = config.get("app.development");
   const ASSETS_DEVELOPMENT = config.get("assets.development");
+  const LOCALE = config.get('app.locale');
   const COMPONENT = config.get("app.component");
   const PROCESS_EXCEPTION_HANDLERS = config.get("app.processExceptionHandlers");
   const RENDER_MODE = config.get("app.mode");
@@ -166,6 +167,22 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     const responseTiming = new ResponseTiming({ timeAllRoutes: TIME_ALL_ROUTES, groupStatusCodes: GROUP_STATUS_CODES });
     fastify.register(responseTiming.plugin());
     metricStreams.push(responseTiming.metrics);
+  }
+
+  /**
+   * Read in localisation files using locale config
+   * Empty string as default if matching translation file does not exist
+   */
+  let translations = ''
+  const localFilePath = join(process.cwd(), 'locale', LOCALE) + '.json';
+  if (existsSync(localFilePath)) {
+    try {
+      const translation = JSON.parse(readFileSync(localFilePath, { encoding: 'utf8' }));
+      translations = ` translations='${JSON.stringify({[LOCALE]:{translation}})}'`;
+    // localisation = `<script type="application/json" data-locale="${LOCALE}">${JSON.stringify({[LOCALE]:{translation}})}</script>`;
+    } catch(err) {
+      fastify.log.error(`Error reading translation file: ${localFilePath}`, err);
+    }
   }
 
   /**
@@ -495,7 +512,8 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
         // @ts-ignore
         (await setContentState(req, reply.app.podium.context)) || ""
       );
-      const template = `<${NAME}-content initial-state='${initialState}'></${NAME}-content>`;
+
+      const template = `<${NAME}-content locale='${LOCALE}'${translations} initial-state='${initialState}'></${NAME}-content>`;
 
       switch (RENDER_MODE) {
         case renderModes.SSR_ONLY:
