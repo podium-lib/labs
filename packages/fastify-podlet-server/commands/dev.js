@@ -85,15 +85,17 @@ clientWatcher.on("change", async () => {
 // new EventSource('http://localhost:6935/esbuild').addEventListener('change', () => { location.reload() });
 await buildContext.serve({ port: 6935 });
 
-// Build the bundle for the first time
-// await buildContext.rebuild();
-
 // Create and start a development server
 const started = await start({
   logger: LOGGER,
   // @ts-ignore
   app: (app, opts, done) => {
     app.register(fastifyPodletPlugin, { config });
+
+    app.addHook('onError', (request, reply, error, done) => {
+      buildContext.dispose();
+      done();
+    })
 
     // register user provided plugin using sandbox to enable reloading
     if (existsSync(SERVER_FILEPATH)) {
@@ -113,11 +115,26 @@ const serverWatcher = chokidar.watch(["server.*", "server/**/*"], {
   followSymlinks: false,
   cwd: process.cwd(),
 });
+serverWatcher.on('error', () => {
+  buildContext.dispose();
+})
 
 // restart the server whenever a server related file changes
 serverWatcher.on("change", async () => {
-  await started.restart();
+  try {
+    await started.restart();
+  } catch (err) {
+    console.log(err);
+    buildContext.dispose();
+  }
 });
 
 // start the server for the first time
-await started.listen();
+try {
+  await started.listen();
+} catch (err) {
+  console.log(err);
+  buildContext.dispose();
+}
+
+
