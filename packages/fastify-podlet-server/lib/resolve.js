@@ -9,6 +9,7 @@ export default async function resolve(filePath) {
     await readFile(tsSrcPath, { encoding: "utf8" });
     return tsSrcPath;
   } catch (err) {
+    // if error was not due to file not existing, log.
     if (err.errno !== -2) {
       console.log(err);
     }
