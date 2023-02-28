@@ -1,9 +1,9 @@
 // @ts-ignore
 import { LitElement } from "lit";
-import i18next from "i18next";
+import { registerTranslateConfig, get } from "lit-translate";
 
 export class PodiumPodletElement extends LitElement {
-  #t;
+  #translationSupport = false;
 
   /**
    * Singleton initialiser for the translate function. A singleton is used to that SSR is supported since
@@ -11,39 +11,27 @@ export class PodiumPodletElement extends LitElement {
    * sets up i18next after which the setup version is then used.
    */
   get t() {
-    if (!this.#t) {
-      if (this.getAttribute("locale") && this.getAttribute("translations")) {
-        i18next.init(
-          {
-            lng: this.getAttribute("locale") || '',
-            debug: true,
-            resources: JSON.parse(this.getAttribute("translations") || "{}"),
-          },
-          (err, t) => {
-            if (err) {
-              console.error(`Error initialising localisation`, err);
-            }
-            this.#t = t;
-          }
-        );
-      } else {
-        console.error('Missing necessary localisation files, unable to perform translation');
-        this.#t = () => {};
-      }
+    if (!this.#translationSupport) {
+      registerTranslateConfig({
+        translationCache: this.translations,
+        lang: this.locale || '',
+      });
+      this.#translationSupport = true;
     }
-    return this.#t;
+    return get;
   }
 
-  /**
-   * Retrieves initial state set by backend
-   * @returns {object}
-   */
-  getInitialState() {
-    try {
-      // @ts-ignore
-      return JSON.parse(this.getAttribute("initial-state") || "{}");
-    } catch (err) {
-      return {};
-    }
+  get translations() {
+    return this.getAttribute("translations")
+      ? JSON.parse(this.getAttribute("translations") || "{}")
+      : null;
+  }
+
+  get locale() {
+    return this.getAttribute("locale");
+  }
+
+  get initialState() {
+    return JSON.parse(this.getAttribute("initial-state") || "{}");
   }
 }

@@ -26,6 +26,6 @@
     "access": "public"
   },
   "dependencies": {
-    "i18next": "^22.4.10"
+    "lit-translate": "^2.0.1"
   }
 }

@@ -178,8 +178,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   if (existsSync(localFilePath)) {
     try {
       const translation = JSON.parse(readFileSync(localFilePath, { encoding: 'utf8' }));
-      translations = ` translations='${JSON.stringify({[LOCALE]:{translation}})}'`;
-    // localisation = `<script type="application/json" data-locale="${LOCALE}">${JSON.stringify({[LOCALE]:{translation}})}</script>`;
+      translations = ` translations='${JSON.stringify(translation)}'`;
     } catch(err) {
       fastify.log.error(`Error reading translation file: ${localFilePath}`, err);
     }
@@ -560,7 +559,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
         // @ts-ignore
         (await setFallbackState(req, reply.app.podium.context)) || ""
       );
-      const template = `<${NAME}-fallback initial-state='${initialState}'></${NAME}-fallback>`;
+      const template = `<${NAME}-fallback locale='${LOCALE}'${translations} initial-state='${initialState}'></${NAME}-fallback>`;
       switch (RENDER_MODE) {
         case renderModes.SSR_ONLY:
           // @ts-ignore
