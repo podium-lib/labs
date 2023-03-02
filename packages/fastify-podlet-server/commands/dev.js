@@ -90,6 +90,12 @@ const started = await start({
   logger: LOGGER,
   // @ts-ignore
   app: (app, opts, done) => {
+    if (config.get('app.base') !== "/") {
+      app.get("/", (request, reply) => {
+        reply.redirect(config.get('app.base'));
+      })
+    }
+
     app.register(fastifyPodletPlugin, { config });
 
     app.addHook('onError', (request, reply, error, done) => {
@@ -99,7 +105,7 @@ const started = await start({
 
     // register user provided plugin using sandbox to enable reloading
     if (existsSync(SERVER_FILEPATH)) {
-      app.register(sandbox, { path: SERVER_FILEPATH, options: { config, podlet: app.podlet } });
+      app.register(sandbox, { path: SERVER_FILEPATH, options: { prefix: config.get('app.base'), config, podlet: app.podlet } });
     }
 
     done();

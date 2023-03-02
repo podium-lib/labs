@@ -20,6 +20,13 @@ export const schema = {
       env: "DOMAIN",
       arg: "domain",
     },
+    base: {
+      doc: "The base pathname to mount the app routes on. Defaults to the app name",
+      format: String,
+      default: "",
+      env: "APP_BASE",
+      arg: "app-base",
+    },
     port: {
       doc: "The port to expose the http service on",
       format: "port",
@@ -125,9 +132,9 @@ export const schema = {
   },
   assets: {
     base: {
-      doc: "Base path or URL for assets. Eg. /static or https://assets.cdn.com/static. Locally this is files in the dist folder. DO NOT include trailing slash.",
+      doc: "Base path or URL for assets. Eg. /static or https://assets.cdn.com/static. DO NOT include trailing slash.",
       format: String,
-      default: "/static",
+      default: "",
     },
     development: {
       doc: "Asset development mode. When enabled, content and fallback will be wrapped in development scripts. Should be set to false when in production.",

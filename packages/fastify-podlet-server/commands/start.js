@@ -8,7 +8,7 @@ import config from "../lib/config.js";
 
 const app = fastify({ logger: true, ignoreTrailingSlash: true });
 
-app.register(fastifyPodletPlugin, { config });
+app.register(fastifyPodletPlugin, { prefix: config.get("app.base"), config });
 
 /** @type {any} */
 let fastifyApp = app;
@@ -19,7 +19,11 @@ const podlet = fastifyApp.podlet;
 const serverFilePath = join(process.cwd(), "server.js");
 if (existsSync(serverFilePath)) {
   const server = (await import(serverFilePath)).default;
-  app.register(server, { config, podlet });
+  app.register(server, { prefix: config.get("app.base"), config, podlet });
 }
 
-app.listen({ port: config.get("app.port") });
+try {
+await app.listen({ port: config.get("app.port") });
+} catch(err) {
+  console.log(err)
+}

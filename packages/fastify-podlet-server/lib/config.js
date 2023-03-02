@@ -11,8 +11,8 @@ convict.addFormats(formats);
 // will be merged into the base config and can then be overridden as needed
 // for specific environments, domains or globally.
 let userSchema = {};
-if (existsSync(join(process.cwd(), "config/schema.js"))) {
-  userSchema = (await import(join(process.cwd(), "config/schema.js"))).default;
+if (existsSync(`${join(process.cwd(), "config", "schema")}.js`)) {
+  userSchema = (await import(`${join(process.cwd(), "config", "schema")}.js`)).default;
 }
 
 const config = convict({ ...schema, ...userSchema });
@@ -36,7 +36,11 @@ if (env === "local") {
 
 // name defaults to the name field in package.json
 const { name } = JSON.parse(await readFile(join(process.cwd(), "package.json"), { encoding: "utf8" }));
-config.load({ app: { name } });
+// makes it possible to change the path that the app is mounted at by changing config.
+// {
+//   "app": { "base": "/" }
+// }
+config.load({ app: { name, base: `/${name}` } });
 
 // if a fallback is defined, set the fallback path
 // this is so that the Podlet object fallback setting does not get set if no fallback is defined.
@@ -46,14 +50,14 @@ if (existsSync(join(process.cwd(), "fallback.js"))) {
 
 // load comon config overrides if provided
 // common.json is supported so that users can override core config without needing to override for multiple environments or domains
-if (existsSync(join(process.cwd(), "config/common.json"))) {
-  config.loadFile(join(process.cwd(), "config/common.json"));
+if (existsSync(join(process.cwd(), `${join("config", "common")}.json`))) {
+  config.loadFile(join(process.cwd(), `${join("config", "common")}.json`));
 }
 
 // load specific overrides if provided
 // fine grained config overrides. Domain and env overrides etc.
-if (existsSync(join(process.cwd(), `config/domains/${domain}/config.${env}.json`))) {
-  config.loadFile(join(process.cwd(), `config/domains/${domain}/config.${env}.json`));
+if (existsSync(join(process.cwd(), `${join("config", "domains", domain, "config")}.${env}.json`))) {
+  config.loadFile(join(process.cwd(), `${join("config", "domains", domain, "config")}.${env}.json`));
 }
 
 // once all is setup, validate.

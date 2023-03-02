@@ -32,7 +32,25 @@ const renderModes = {
   // PUBLISH: "publish",
 };
 
-const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
+const isAbsoluteURL = (pathOrUrl) => {
+  const url = new URL(pathOrUrl, "http://local");
+  if (url.origin !== "http://local") return true;
+  return false;
+};
+
+const joinURLPathSegments = (...segments) => {
+  return segments.join("/").replace(/[\/]+/g, "/");
+};
+
+// if base is absolute, use it as is
+// if base is relative, join it with the prefix which is where the app is mounted
+// if no base is provided by the user/developer, use a fallback joined with prefix (/static)
+const resolveAssetsBasePath = ({ base, prefix, fallback }) => {
+  if (isAbsoluteURL(base)) return base;
+  return joinURLPathSegments(prefix, base || fallback);
+};
+
+const plugin = async function fastifyPodletServerPlugin(fastify, { prefix, config }) {
   const NAME = config.get("app.name");
   const VERSION = config.get("podlet.version");
   const PATHNAME = config.get("podlet.pathname");
@@ -50,7 +68,9 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   const TIMING_METRICS = config.get("metrics.timing.enabled");
   const TIME_ALL_ROUTES = config.get("metrics.timing.timeAllRoutes");
   const GROUP_STATUS_CODES = config.get("metrics.timing.groupStatusCodes");
-  const BASE_PATH = config.get("assets.base");
+  const ASSETS_BASE_PATH = resolveAssetsBasePath({ base: config.get("assets.base"), prefix, fallback: "static" });
+  const ASSETS_BASE_PATH_MOUNT_POINT = config.get("assets.base") || "/static";
+  const MODULES_BASE_PATH = prefix === "/" ? `/node_modules` : `${prefix}/node_modules`;
   const COMPRESSION = config.get("app.compression");
   const PACKAGE_JSON = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), { encoding: "utf8" }));
   const PODIUM_VERSION = new SemVer(PACKAGE_JSON.dependencies["@podium/podlet"].replace("^", "").replace("~", ""));
@@ -100,13 +120,13 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   }
 
   /**
-   * Serve all assets in the dist folder when in development mode
+   * Serve all assets in the dist folder when an absolute assets.base value is not present.
    * Files are built into the dist folder by either the podlet-dev command or the podlet-build command
    */
-  if (DEVELOPMENT) {
+  if (!isAbsoluteURL(ASSETS_BASE_PATH)) {
     fastify.register(fastifyStatic, {
       root: join(process.cwd(), "dist"),
-      prefix: "/static/",
+      prefix: ASSETS_BASE_PATH_MOUNT_POINT,
     });
   }
 
@@ -156,7 +176,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
    * Manifest Route
    */
   // @ts-ignore
-  fastify.get(join("/", NAME || "", podlet.manifest()), async (req, reply) => {
+  fastify.get(podlet.manifest(), async (req, reply) => {
     // enable timing metrics for this route
     reply.context.config.timing = true;
 
@@ -399,15 +419,15 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     if (ASSETS_DEVELOPMENT) {
       clientSideScript = `
         <script type="module">
-          import '/node_modules/lit/experimental-hydrate-support.js';
-          import El from '${BASE_PATH}/client/${name}.js';
+          import '${MODULES_BASE_PATH}/lit/experimental-hydrate-support.js';
+          import El from '${ASSETS_BASE_PATH}/client/${name}.js';
           customElements.define("${NAME}-${name}",El);
           ${livereloadSnippet}
         </script>
       `;
     } else {
       // in production, all scripts are bundled into a single file
-      clientSideScript = `<script type="module" src="${BASE_PATH}/client/${name}.js"></script>`;
+      clientSideScript = `<script type="module" src="${ASSETS_BASE_PATH}/client/${name}.js"></script>`;
     }
 
     // render final markup
@@ -462,14 +482,14 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     if (ASSETS_DEVELOPMENT) {
       clientSideScript = `
         <script type="module">
-          import El from '${BASE_PATH}/client/${name}.js';
+          import El from '${ASSETS_BASE_PATH}/client/${name}.js';
           customElements.define("${NAME}-${name}",El);
           ${livereloadSnippet}
         </script>
       `;
     } else {
       // in production, all scripts are bundled into a single file
-      clientSideScript = `<script type="module" src="${BASE_PATH}/client/${name}.js"></script>`;
+      clientSideScript = `<script type="module" src="${ASSETS_BASE_PATH}/client/${name}.js"></script>`;
     }
 
     // render final markup
@@ -485,13 +505,6 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   const FALLBACK_SCHEMA_PATH = await resolve(join(process.cwd(), "schemas/fallback.js"));
 
   if (existsSync(CONTENT_PATH)) {
-    // if in development mode redirect root to content route
-    if (DEVELOPMENT) {
-      fastify.get("/", (request, reply) => {
-        reply.redirect(join("/", NAME || "", podlet.content()));
-      });
-    }
-
     // register user defined validation schema for route if provided
     // looks for a file named schemas/content.js and if present, imports
     // and provides to route.
@@ -503,7 +516,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     // builds content route path out of root + app name + the content path value in the podlet manifest
     // by default this will be / + folder name + / eg. /my-podlet/
     // content route
-    fastify.get(join("/", NAME || "", podlet.content()), contentOptions, async (req, reply) => {
+    fastify.get(podlet.content(), contentOptions, async (req, reply) => {
       // enable timing metrics for this route
       reply.context.config.timing = true;
 
@@ -512,7 +525,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
         (await setContentState(req, reply.app.podium.context)) || ""
       );
 
-      const template = `<${NAME}-content locale='${LOCALE}'${translations} initial-state='${initialState}'></${NAME}-content>`;
+      const template = `<${NAME}-content version="${VERSION}" locale='${LOCALE}'${translations} initial-state='${initialState}'></${NAME}-content>`;
 
       switch (RENDER_MODE) {
         case renderModes.SSR_ONLY:
@@ -530,13 +543,6 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
       }
       return reply;
     });
-  } else {
-    // if in development mode and no content route is defined, redirect root to manifest route
-    if (DEVELOPMENT) {
-      fastify.get("/", (request, reply) => {
-        reply.redirect(join("/", NAME || "", podlet.manifest()));
-      });
-    }
   }
 
   if (existsSync(FALLBACK_PATH)) {
@@ -551,7 +557,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
     // builds fallback route path out of root + app name + the fallback path value in the podlet manifest
     // by default this will be / + folder name + /fallback eg. /my-podlet/fallback
     // fallback route
-    fastify.get(join("/", NAME || "", podlet.fallback()), fallbackOptions, async (req, reply) => {
+    fastify.get(podlet.fallback(), fallbackOptions, async (req, reply) => {
       // enable timing metrics for this route
       reply.context.config.timing = true;
 
@@ -559,7 +565,7 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
         // @ts-ignore
         (await setFallbackState(req, reply.app.podium.context)) || ""
       );
-      const template = `<${NAME}-fallback locale='${LOCALE}'${translations} initial-state='${initialState}'></${NAME}-fallback>`;
+      const template = `<${NAME}-fallback version="${VERSION}" locale='${LOCALE}'${translations} initial-state='${initialState}'></${NAME}-fallback>`;
       switch (RENDER_MODE) {
         case renderModes.SSR_ONLY:
           // @ts-ignore
@@ -594,4 +600,6 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { config }) {
   }
 };
 
-export default fp(plugin);
+export default fp(async function (fastify, { config }) {
+  fastify.register(plugin, { prefix: config.get("app.base") || "/", config });
+});
