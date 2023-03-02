@@ -67,11 +67,6 @@ export const schema = {
       format: Number,
       default: 0,
     },
-    processExceptionHandlers: {
-      doc: "Use built in process exception handlers",
-      format: Boolean,
-      default: true,
-    },
     compression: {
       doc: "Enables/disables compression on routes",
       format: Boolean,
@@ -123,11 +118,6 @@ export const schema = {
         format: Boolean,
         default: true,
       },
-    },
-    enabled: {
-      doc: "Enable/disable metrics collection",
-      format: Boolean,
-      default: true,
     },
   },
   assets: {

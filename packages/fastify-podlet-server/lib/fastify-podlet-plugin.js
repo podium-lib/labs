@@ -50,84 +50,461 @@ const resolveAssetsBasePath = ({ base, prefix, fallback }) => {
   return joinURLPathSegments(prefix, base || fallback);
 };
 
-const plugin = async function fastifyPodletServerPlugin(fastify, { prefix, config }) {
+/**
+ * Imports a custom element by pathname, bundles it and registers it in the server side custom element
+ * registry.
+ * In production mode, this happens 1x for each unique filepath after which this function will noop
+ * In development mode, every call to this function will yield a fresh version of the custom element being re-registered
+ * to the custom element registry.
+ * @param {string} filepath
+ */
+const importComponentForSSR = async (filepath, config, logger) => {
   const NAME = config.get("app.name");
-  const VERSION = config.get("podlet.version");
-  const PATHNAME = config.get("podlet.pathname");
-  const MANIFEST = config.get("podlet.manifest");
-  const CONTENT = config.get("podlet.content");
-  const FALLBACK = config.get("podlet.fallback");
   const DEVELOPMENT = config.get("app.development");
-  const ASSETS_DEVELOPMENT = config.get("assets.development");
-  const LOCALE = config.get("app.locale");
-  const COMPONENT = config.get("app.component");
-  const PROCESS_EXCEPTION_HANDLERS = config.get("app.processExceptionHandlers");
-  const RENDER_MODE = config.get("app.mode");
-  const GRACE = config.get("app.grace");
-  const METRICS_ENABLED = config.get("metrics.enabled");
-  const TIMING_METRICS = config.get("metrics.timing.enabled");
-  const TIME_ALL_ROUTES = config.get("metrics.timing.timeAllRoutes");
-  const GROUP_STATUS_CODES = config.get("metrics.timing.groupStatusCodes");
-  const ASSETS_BASE_PATH = resolveAssetsBasePath({ base: config.get("assets.base"), prefix, fallback: "static" });
-  const ASSETS_BASE_PATH_MOUNT_POINT = config.get("assets.base") || "/static";
-  const MODULES_BASE_PATH = prefix === "/" ? `/node_modules` : `${prefix}/node_modules`;
-  const COMPRESSION = config.get("app.compression");
-  const PACKAGE_JSON = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), { encoding: "utf8" }));
-  const PODIUM_VERSION = new SemVer(PACKAGE_JSON.dependencies["@podium/podlet"].replace("^", "").replace("~", ""));
-  const DSD_POLYFILL = readFileSync(new URL("./dsd-polyfill.js", import.meta.url), { encoding: "utf8" });
+  const TYPE = parse(filepath).name;
+  const OUTDIR = join(process.cwd(), "dist", "server");
+  // support user defined plugins via a build.js file
+  const BUILD_FILEPATH = join(process.cwd(), "build.js");
 
-  const metricStreams = [];
+  const plugins = [];
+  if (existsSync(BUILD_FILEPATH)) {
+    try {
+      const userDefinedBuild = (await import(BUILD_FILEPATH)).default;
+      const userDefinedPlugins = await userDefinedBuild({ config });
+      if (Array.isArray(userDefinedPlugins)) {
+        plugins.unshift(...userDefinedPlugins);
+      }
+    } catch (err) {
+      // noop
+    }
+  }
 
-  const podlet = new Podlet({
-    name: NAME,
-    version: VERSION,
-    pathname: PATHNAME,
-    manifest: MANIFEST,
-    content: CONTENT,
-    fallback: FALLBACK,
-    development: DEVELOPMENT,
-    logger: fastify.log,
-  });
+  // import cache breaking filename using date string
+  const outfile = join(OUTDIR, `${TYPE}.js`);
+  if (existsSync(filepath)) {
+    try {
+      await esbuild.build({
+        entryPoints: [filepath],
+        bundle: true,
+        format: "esm",
+        outfile,
+        minify: true,
+        plugins,
+        legalComments: `none`,
+        sourcemap: true,
+        external: ["lit"],
+      });
+      // import fresh copy of the custom element
+      const Element = (await import(`${outfile}?s=${Date.now()}`)).default;
+
+      // if already defined from a previous request, delete from registry
+      if (customElements.get(`${NAME}-${TYPE}`)) {
+        // if in production mode and the component has already been defined,
+        // no more work is needed, so we bail early
+        if (!DEVELOPMENT) return;
+        // @ts-ignore
+        customElements.__definitions.delete(`${NAME}-${TYPE}`);
+      }
+
+      // define newly imported custom element in the registry
+      customElements.define(`${NAME}-${TYPE}`, Element);
+    } catch (err) {
+      logger.error(err);
+    }
+  }
+};
+
+class PodletServerPlugin {
+  #config;
+  #logger;
+  #metrics = new Metrics();
+  #metricStreams = [];
+  #name;
+  #version;
+  #pathname;
+  #manifest;
+  #content;
+  #fallback;
+  #development;
+  #assetsDevelopment;
+  #locale;
+  #renderMode;
+  #grace;
+  #timeAllRoutes;
+  #groupStatusCodes;
+  #assetsBasePath;
+  #assetsBasePathMountPoint;
+  #modulesBasePath;
+  #compression;
+  #packageJson;
+  #podiumVersion;
+  #dsdPolyfill;
+  #fastify;
+  #podlet;
+  #translations;
 
   /**
-   * Experimental: decorate the fastify object that is passed to ./server.js with 3 objects.
-   * config and podlet are also injected into the plugin as arguments so this approach isn't strictly necessary
-   * but may be preferable?
-   *
-   * export default function server(fastify) {
-   *  fastify.config.get(...)
-   *  fastify.podlet.proxy(...)
-   *  fastify.proxy(...)
-   * }
-   *
-   * vs
-   *
-   * export default function server(fastify, { config, podlet }) {
-   *   config.get(...)
-   *   config.proxy(...)
-   * }
+   * @type {(req: import('fastify').FastifyRequest, context: any) => Promise<{ [key: string]: any; [key: number]: any; } | null>}
    */
-  fastify.decorate("config", config);
-  fastify.decorate("podlet", podlet);
-  fastify.decorate("proxy", podlet.proxy.bind(podlet));
+  #contentStateFn = async (req, context) => ({});
+  /**
+   * @type {(req: import('fastify').FastifyRequest, context: any) => Promise<{ [key: string]: any; [key: number]: any; } | null>}
+   */
+  #fallbackStateFn = async (req, context) => ({});
+
+  constructor({ config, logger, prefix }) {
+    this.#config = config;
+    this.#logger = logger;
+    this.#name = config.get("app.name");
+    this.#version = config.get("podlet.version");
+    this.#pathname = config.get("podlet.pathname");
+    this.#manifest = config.get("podlet.manifest");
+    this.#content = config.get("podlet.content");
+    this.#fallback = config.get("podlet.fallback");
+    this.#development = config.get("app.development");
+    this.#assetsDevelopment = config.get("assets.development");
+    this.#locale = config.get("app.locale");
+    this.#renderMode = config.get("app.mode");
+    this.#grace = config.get("app.grace");
+    this.#timeAllRoutes = config.get("metrics.timing.timeAllRoutes");
+    this.#groupStatusCodes = config.get("metrics.timing.groupStatusCodes");
+    this.#assetsBasePath = resolveAssetsBasePath({ base: config.get("assets.base"), prefix, fallback: "static" });
+    this.#assetsBasePathMountPoint = config.get("assets.base") || "/static";
+    this.#modulesBasePath = prefix === "/" ? `/node_modules` : `${prefix}/node_modules`;
+    this.#compression = config.get("app.compression");
+    this.#packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), { encoding: "utf8" }));
+    this.#podiumVersion = new SemVer(
+      this.#packageJson.dependencies["@podium/podlet"].replace("^", "").replace("~", "")
+    );
+    this.#dsdPolyfill = readFileSync(new URL("./dsd-polyfill.js", import.meta.url), { encoding: "utf8" });
+
+    this.#podlet = new Podlet({
+      name: this.#name,
+      version: this.#version,
+      pathname: this.#pathname,
+      manifest: this.#manifest,
+      content: this.#content,
+      fallback: this.#fallback,
+      development: this.#development,
+      logger,
+    });
+
+    /**
+     * Generate a metric for which major version of the Podium podlet is being run
+     * Metric is pushed into the podlet metrics stream which is then collected
+     */
+    // @ts-ignore
+    const gauge = this.#podlet.metrics.gauge({
+      name: "active_podlet",
+      description: "Indicates if a podlet is mounted and active",
+      labels: { podium_version: this.#podiumVersion.major, podlet_name: this.#name },
+    });
+    setImmediate(() => gauge.set(1));
+
+    // @ts-ignore
+    this.#metricStreams.push(this.#podlet.metrics);
+  }
 
   /**
-   * Compression is included because until we resolve an issue with the layout client,
-   * we need to ensure payloads are relatively small so as not to have the client error.
+   * @param {(req: import('fastify').FastifyRequest, context: any) => Promise<{ [key: string]: any; [key: number]: any; } | null>} stateFunction
    */
-  if (COMPRESSION) {
-    await fastify.register(compress, { global: true });
+  setContentState(stateFunction) {
+    this.#contentStateFn = stateFunction;
+  }
+  /**
+   * @param {(req: import('fastify').FastifyRequest, context: any) => Promise<{ [key: string]: any; [key: number]: any; } | null>} stateFunction
+   */
+  setFallbackState(stateFunction) {
+    this.#fallbackStateFn = stateFunction;
+  }
+
+  async hydrate({ reply, template, filepath }) {
+    const { name } = parse(filepath);
+    reply.type("text/html; charset=utf-8");
+    try {
+      await importComponentForSSR(filepath, this.#config, this.#logger);
+    } catch (err) {
+      this.#logger.error(err);
+    }
+
+    // user provided markup, SSR'd
+    const ssrMarkup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
+    // polyfill for browsers that don't support declarative shadow dom
+    const polyfillMarkup = `<script>${this.#dsdPolyfill}</script>`;
+    // live reload snippet that connects to esbuild server and listens for rebuilds and reloads page.
+    const livereloadSnippet = this.#assetsDevelopment
+      ? `new EventSource('http://localhost:6935/esbuild').addEventListener('change',()=>location.reload());`
+      : "";
+    // wrap user provided component in hydration support and live reload snippet and define component in registry
+    let clientSideScript;
+
+    if (this.#assetsDevelopment) {
+      clientSideScript = `
+        <script type="module">
+          import '${this.#modulesBasePath}/lit/experimental-hydrate-support.js';
+          import El from '${this.#assetsBasePath}/client/${name}.js';
+          customElements.define("${this.#name}-${name}",El);
+          ${livereloadSnippet}
+        </script>
+      `;
+    } else {
+      // in production, all scripts are bundled into a single file
+      clientSideScript = `<script type="module" src="${this.#assetsBasePath}/client/${name}.js"></script>`;
+    }
+
+    // render final markup
+    const markup = this.#podlet.render(reply.app.podium, `${ssrMarkup}${polyfillMarkup}${clientSideScript}`);
+
+    // @ts-ignore
+    this.#compression ? reply.compress(markup) : reply.send(markup);
+  }
+
+  async ssrOnly({ reply, template, filepath }) {
+    reply.type("text/html; charset=utf-8");
+    try {
+      await importComponentForSSR(filepath, this.#config, this.#logger);
+    } catch (err) {
+      this.#logger.error(err);
+    }
+
+    const ssrMarkup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
+    const polyfillMarkup = `<script>${this.#dsdPolyfill}</script>`;
+    const markup = this.#podlet.render(reply.app.podium, `${ssrMarkup}${polyfillMarkup}`);
+
+    // @ts-ignore
+    this.#compression ? reply.compress(markup) : reply.send(markup);
+  }
+
+  async csrOnly({ reply, template, filepath }) {
+    reply.type("text/html; charset=utf-8");
+
+    const { name } = parse(filepath);
+    reply.type("text/html; charset=utf-8");
+    try {
+      await importComponentForSSR(filepath, this.#config, this.#logger);
+    } catch (err) {
+      this.#logger.error(err);
+    }
+
+    // live reload snippet that connects to esbuild server and listens for rebuilds and reloads page.
+    const livereloadSnippet = this.#assetsDevelopment
+      ? `new EventSource('http://localhost:6935/esbuild').addEventListener('change',()=>location.reload());`
+      : "";
+    // wrap user provided component in hydration support and live reload snippet and define component in registry
+    let clientSideScript;
+
+    if (this.#assetsDevelopment) {
+      clientSideScript = `
+        <script type="module">
+          import El from '${this.#assetsBasePath}/client/${name}.js';
+          customElements.define("${this.#name}-${name}",El);
+          ${livereloadSnippet}
+        </script>
+      `;
+    } else {
+      // in production, all scripts are bundled into a single file
+      clientSideScript = `<script type="module" src="${this.#assetsBasePath}/client/${name}.js"></script>`;
+    }
+
+    // render final markup
+    const markup = this.#podlet.render(reply.app.podium, `${template}${clientSideScript}`);
+
+    // @ts-ignore
+    this.#compression ? reply.compress(markup) : reply.send(markup);
+  }
+
+  async manifestRoute() {
+    this.#fastify.get(this.#podlet.manifest(), async (req, reply) => {
+      // enable timing metrics for this route
+      reply.context.config.timing = true;
+      return JSON.stringify(this.#podlet);
+    });
+  }
+
+  /**
+   * Read in localisation files using locale config
+   * Empty string as default if matching translation file does not exist
+   */
+  translations() {
+    const localFilePath = join(process.cwd(), "locale", this.#locale) + ".json";
+    if (existsSync(localFilePath)) {
+      try {
+        const translation = JSON.parse(readFileSync(localFilePath, { encoding: "utf8" }));
+        this.#translations = ` translations='${JSON.stringify(translation)}'`;
+      } catch (err) {
+        this.#logger.error(`Error reading translation file: ${localFilePath}`, err);
+      }
+    }
+  }
+
+  /**
+   * Sets up a content route if needed.
+   * Detects the presence of content.js or content.ts and if so, sets up the route.
+   * A schema content file is also checked for at schemas/content and if found is used for validation
+   * of things like query params and so on. See fastify route schemas for more details.
+   *
+   * Route uses the apps render mode (ssr, hydrate or csr) to determine how to render the content.
+   *
+   * The actual content to render is the custom element markup with additional properties for locale, initial state etc.
+   */
+  async contentRoute() {
+    const CONTENT_PATH = await resolve(join(process.cwd(), "content.js"));
+    const CONTENT_SCHEMA_PATH = await resolve(join(process.cwd(), "schemas/content.js"));
+
+    if (existsSync(CONTENT_PATH)) {
+      // register user defined validation schema for route if provided
+      // looks for a file named schemas/content.js and if present, imports
+      // and provides to route.
+      const contentOptions = {};
+      if (existsSync(CONTENT_SCHEMA_PATH)) {
+        contentOptions.schema = (await import(CONTENT_SCHEMA_PATH)).default;
+      }
+
+      // builds content route path out of root + app name + the content path value in the podlet manifest
+      // by default this will be / + folder name + / eg. /my-podlet/
+      // content route
+      this.#fastify.get(this.#podlet.content(), contentOptions, async (req, reply) => {
+        // enable timing metrics for this route
+        reply.context.config.timing = true;
+
+        const initialState = JSON.stringify(
+          // @ts-ignore
+          (await this.#contentStateFn(req, reply.app.podium.context)) || ""
+        );
+
+        const template = `<${this.#name}-content version="${this.#version}" locale='${this.#locale}'${
+          this.#translations
+        } initial-state='${initialState}'></${this.#name}-content>`;
+
+        switch (this.#renderMode) {
+          case renderModes.SSR_ONLY:
+            // @ts-ignore
+            await this.ssrOnly({ reply, template, filepath: CONTENT_PATH });
+            break;
+          case renderModes.CSR_ONLY:
+            // @ts-ignore
+            await this.csrOnly({ reply, template, filepath: CONTENT_PATH });
+            break;
+          case renderModes.HYDRATE:
+            // @ts-ignore
+            await this.hydrate({ reply, template, filepath: CONTENT_PATH });
+            break;
+        }
+        return reply;
+      });
+    }
+  }
+
+  /**
+   * Sets up a fallback route if needed.
+   * Detects the presence of fallback.js or fallback.ts and if so, sets up the route.
+   * A schema fallback file is also checked for at schemas/fallback and if found is used for validation
+   * of things like query params and so on. See fastify route schemas for more details.
+   *
+   * Route uses the apps render mode (ssr, hydrate or csr) to determine how to render the content.
+   *
+   * The actual content to render is the custom element markup with additional properties for locale, initial state etc.
+   */
+  async fallbackRoute() {
+    const FALLBACK_PATH = await resolve(join(process.cwd(), "fallback.js"));
+    const FALLBACK_SCHEMA_PATH = await resolve(join(process.cwd(), "schemas/fallback.js"));
+    if (existsSync(FALLBACK_PATH)) {
+      // register user defined validation schema for route if provided
+      // looks for a file named schemas/fallback.js and if present, imports
+      // and provides to route.
+      const fallbackOptions = {};
+      if (existsSync(FALLBACK_SCHEMA_PATH)) {
+        fallbackOptions.schema = (await import(FALLBACK_SCHEMA_PATH)).default;
+      }
+
+      // builds fallback route path out of root + app name + the fallback path value in the podlet manifest
+      // by default this will be / + folder name + /fallback eg. /my-podlet/fallback
+      // fallback route
+      this.#fastify.get(this.#podlet.fallback(), fallbackOptions, async (req, reply) => {
+        // enable timing metrics for this route
+        reply.context.config.timing = true;
+
+        const initialState = JSON.stringify(
+          // @ts-ignore
+          (await this.#fallbackStateFn(req, reply.app.podium.context)) || ""
+        );
+        const template = `<${this.#name}-fallback version="${this.#version}" locale='${this.#locale}'${
+          this.#translations
+        } initial-state='${initialState}'></${this.#name}-fallback>`;
+        switch (this.#renderMode) {
+          case renderModes.SSR_ONLY:
+            // @ts-ignore
+            await this.ssrOnly({ reply, template, filepath: FALLBACK_PATH });
+            break;
+          case renderModes.CSR_ONLY:
+            // @ts-ignore
+            await this.csrOnly({ reply, template, filepath: FALLBACK_PATH });
+            break;
+          case renderModes.HYDRATE:
+            // @ts-ignore
+            await this.hydrate({ reply, template, filepath: FALLBACK_PATH });
+            break;
+        }
+        return reply;
+      });
+    }
+  }
+
+  /**
+   * Development feature that bundles and serves client side dependencies on the fly, caching build between requests.
+   * Deps can be requested via /node_modules/{dependency name}
+   *
+   * eg. /node_modules/lit/experimental-hydration-support.js
+   */
+  async dependenciesRoute() {
+    if (this.#assetsDevelopment) {
+      const cache = new Map();
+      this.#fastify.get("/node_modules/*", async (request, reply) => {
+        reply.type("application/javascript");
+        const depname = request.params["*"];
+        if (!cache.has(depname)) {
+          const filepath = require.resolve(depname);
+          const outdir = join(process.cwd(), "dist", "server");
+          const outfile = join(outdir, depname);
+          await esbuild.build({
+            entryPoints: [filepath],
+            bundle: true,
+            format: "esm",
+            outfile,
+            minify: true,
+            sourcemap: false,
+          });
+          const contents = await readFile(outfile, { encoding: "utf8" });
+          cache.set(depname, contents);
+        }
+        reply.send(cache.get(depname));
+        // fastify compress needs us to return reply to avoid early stream termination
+        return reply;
+      });
+    }
   }
 
   /**
    * Serve all assets in the dist folder when an absolute assets.base value is not present.
    * Files are built into the dist folder by either the podlet-dev command or the podlet-build command
    */
-  if (!isAbsoluteURL(ASSETS_BASE_PATH)) {
-    fastify.register(fastifyStatic, {
-      root: join(process.cwd(), "dist"),
-      prefix: ASSETS_BASE_PATH_MOUNT_POINT,
-    });
+  async serveAssets() {
+    if (!isAbsoluteURL(this.#assetsBasePath)) {
+      this.#fastify.register(fastifyStatic, {
+        root: join(process.cwd(), "dist"),
+        prefix: this.#assetsBasePathMountPoint,
+      });
+    }
+  }
+
+  /**
+   * Compression is included because until we resolve an issue with the layout client,
+   * we need to ensure payloads are relatively small so as not to have the client error.
+   */
+  async compression() {
+    if (this.#compression) {
+      await this.#fastify.register(compress, { global: true });
+    }
   }
 
   /**
@@ -136,470 +513,112 @@ const plugin = async function fastifyPodletServerPlugin(fastify, { prefix, confi
    * happen instantly while in prod we want it to wait for connections to end before shutdown
    * so the grace period tends to be set to a few seconds.
    */
-  if (PROCESS_EXCEPTION_HANDLERS) {
-    const procExp = new ProcessExceptionHandlers(fastify.log);
-    procExp.closeOnExit(fastify, { grace: GRACE });
-    metricStreams.push(procExp.metrics);
+  async processExceptionHandlers() {
+    const procExp = new ProcessExceptionHandlers(this.#logger);
+    procExp.closeOnExit(this.#fastify, { grace: this.#grace });
+    this.#metricStreams.push(procExp.metrics);
+  }
+
+  /**
+   * Config getter
+   */
+  get config() {
+    return this.#config;
+  }
+
+  /**
+   * Metrics object getter
+   */
+  get metrics() {
+    return this.#metrics;
+  }
+
+  /**
+   * Podlet object getter
+   */
+  get podlet() {
+    return this.#podlet;
   }
 
   /**
    * We register the Podium podlet Fastify plugin here and pass it the podlet
    * and then collect the metrics
    */
-  // @ts-ignore
-  fastify.register(fastifyPodletPlugin, podlet);
-  // @ts-ignore
-  metricStreams.push(podlet.metrics);
-
-  /**
-   * Generate a metric for which major version of the Podium podlet is being run
-   * Metric is pushed into the podlet metrics stream which is then collected
-   */
-  // @ts-ignore
-  const gauge = podlet.metrics.gauge({
-    name: "active_podlet",
-    description: "Indicates if a podlet is mounted and active",
-    labels: { podium_version: PODIUM_VERSION.major, podlet_name: NAME },
-  });
-  setImmediate(() => gauge.set(1));
-
-  /**
-   * ROUTES:
-   * - manifest
-   * - content
-   * - fallback
-   *
-   * Generate routes with appropriate responses
-   */
-
-  /**
-   * Manifest Route
-   */
-  // @ts-ignore
-  fastify.get(podlet.manifest(), async (req, reply) => {
-    // enable timing metrics for this route
-    reply.context.config.timing = true;
-
-    return JSON.stringify(podlet);
-  });
-
-  if (TIMING_METRICS) {
-    const responseTiming = new ResponseTiming({ timeAllRoutes: TIME_ALL_ROUTES, groupStatusCodes: GROUP_STATUS_CODES });
-    fastify.register(responseTiming.plugin());
-    metricStreams.push(responseTiming.metrics);
+  podletPlugin() {
+    // @ts-ignore
+    this.#fastify.register(fastifyPodletPlugin, this.#podlet);
   }
 
   /**
-   * Read in localisation files using locale config
-   * Empty string as default if matching translation file does not exist
+   * Sets up response timing metrics which hooks into Fastify via a plugin and exposes
+   * metrics via a stream which we then gather up into this.#metricStreams
    */
-  let translations = "";
-  const localFilePath = join(process.cwd(), "locale", LOCALE) + ".json";
-  if (existsSync(localFilePath)) {
-    try {
-      const translation = JSON.parse(readFileSync(localFilePath, { encoding: "utf8" }));
-      translations = ` translations='${JSON.stringify(translation)}'`;
-    } catch (err) {
-      fastify.log.error(`Error reading translation file: ${localFilePath}`, err);
-    }
+  timingMetrics() {
+    const responseTiming = new ResponseTiming({
+      timeAllRoutes: this.#timeAllRoutes,
+      groupStatusCodes: this.#groupStatusCodes,
+    });
+    this.#fastify.register(responseTiming.plugin());
+    this.#metricStreams.push(responseTiming.metrics);
   }
 
   /**
-   * If the user has configured the app to not use components, we don't define the content or fallback routes
-   * and leave that to the user to do in their server.js file.
+   * Sets up metric stream processing. Must be called at the end after other modules have
+   * had a chance to push metric stream objects into this.#metricStreams after which
+   * we gather up these streams and pipe them altogether and expose a single metric object
+   * to be used externally for consumption
    */
-  if (!COMPONENT) return;
-
-  /**
-   * setContentState function
-   *
-   * Use this function to pass values to both server side and client side components.
-   * This function will passed the Fastify request object as a first param and the Podium context as a second.
-   * Values set with this function will be available in the render hook of the content.js content custom element component via
-   * `this.getInitialState();`
-   * @example
-   *  ```
-   *  // in server.js
-   *  export default async function server(app) {
-   *    app.setFallbackState(async (req, context) => {
-   *      // fetch database values or other api sources here and return below
-   *      return {
-   *        val1: "foo",
-   *        val2: "bar",
-   *      };
-   *    });
-   *  }
-   *
-   *  // in content.js
-   *  class Content extends PodiumPodletElement {
-   *    render() {
-   *      // available on both server and client side.
-   *      const { val1, val2 } = this.getInitialState();
-   *      return html`<div>${val1}${val2}</div>`
-   *    }
-   *  }
-   * ```
-   * @param {import('fastify').FastifyRequest} req
-   * @param {any} context
-   * @returns {Promise<{ [key: string]: any; [key: number]: any; } | null>}
-   */
-  let setContentState = async (req, context) => ({});
-
-  fastify.decorate(
-    "setContentState",
+  metricStreams() {
     /**
-     * @param {(req: import('fastify').FastifyRequest, context: any) => Promise<{ [key: string]: any; [key: number]: any; } | null>} stateFunction
+     * Collect up all metrics and expose on a .metrics property of the fastify instance
+     * which can then be piped into a consumer in server.js
      */
-    (stateFunction) => {
-      setContentState = stateFunction;
-    }
-  );
-
-  /**
-   * setFallbackState function
-   *
-   * Use this function to pass values to both server side and client side components.
-   * Fallbacks are cached and therefore cannot gain access to the request object or the Podium context.
-   * Values set with this function will be available in the render hook of the fallback.js fallback custom element component via
-   * `this.getInitialState();`
-   * @example
-   *  ```
-   *  // in server.js
-   *  export default async function server(app) {
-   *    app.setFallbackState(async () => {
-   *      return {
-   *        val1: "foo",
-   *        val2: "bar",
-   *      };
-   *    });
-   *  }
-   *
-   *  // in fallback.js
-   *  class Fallback extends PodiumPodletElement {
-   *    render() {
-   *      // available on both server and client side.
-   *      const { val1, val2 } = this.getInitialState();
-   *      return html`<div>${val1}${val2}</div>`
-   *    }
-   *  }
-   * ```
-   * @param {import('fastify').FastifyRequest} req
-   * @param {any} context
-   * @returns {Promise<{ [key: string]: any; [key: number]: any; } | null>}
-   */
-  let setFallbackState = async (req, context) => ({});
-  fastify.decorate(
-    "setFallbackState",
-    /**
-     * @param {(req: import('fastify').FastifyRequest, context: any) => Promise<{ [key: string]: any; [key: number]: any; } | null>} stateFunction
-     */
-    (stateFunction) => {
-      setFallbackState = stateFunction;
-    }
-  );
-
-  /**
-   * Imports a custom element by pathname, bundles it and registers it in the server side custom element
-   * registry.
-   * In production mode, this happens 1x for each unique filepath after which this function will noop
-   * In development mode, every call to this function will yield a fresh version of the custom element being re-registered
-   * to the custom element registry.
-   * @param {string} filepath
-   */
-  const importComponentForSSR = async (filepath) => {
-    const type = parse(filepath).name;
-    const outdir = join(process.cwd(), "dist", "server");
-
-    // support user defined plugins via a build.js file
-    const BUILD_FILEPATH = join(process.cwd(), "build.js");
-    const plugins = [];
-    if (existsSync(BUILD_FILEPATH)) {
-      try {
-        const userDefinedBuild = (await import(BUILD_FILEPATH)).default;
-        const userDefinedPlugins = await userDefinedBuild({ config });
-        if (Array.isArray(userDefinedPlugins)) {
-          plugins.unshift(...userDefinedPlugins);
-        }
-      } catch (err) {
-        // noop
-      }
-    }
-
-    // import cache breaking filename using date string
-    const outfile = join(outdir, `${type}.js`);
-    if (existsSync(filepath)) {
-      try {
-        await esbuild.build({
-          entryPoints: [filepath],
-          bundle: true,
-          format: "esm",
-          outfile,
-          minify: true,
-          plugins,
-          legalComments: `none`,
-          sourcemap: true,
-          external: ["lit"],
-        });
-        // import fresh copy of the custom element
-        const Element = (await import(`${outfile}?s=${Date.now()}`)).default;
-
-        // if already defined from a previous request, delete from registry
-        if (customElements.get(`${NAME}-${type}`)) {
-          // if in production mode and the component has already been defined,
-          // no more work is needed, so we bail early
-          if (!DEVELOPMENT) return;
-          // @ts-ignore
-          customElements.__definitions.delete(`${NAME}-${type}`);
-        }
-
-        // define newly imported custom element in the registry
-        customElements.define(`${NAME}-${type}`, Element);
-      } catch (err) {
-        fastify.log.error(err);
-      }
-    }
-  };
-
-  /**
-   * Bundle and serve client side dependencies on the fly, caching build between requests.
-   * Deps can be requested via /node_modules/{dependency name}
-   *
-   * eg. /node_modules/lit/experimental-hydration-support.js
-   */
-  if (ASSETS_DEVELOPMENT) {
-    const cache = new Map();
-    fastify.get("/node_modules/*", async (request, reply) => {
-      reply.type("application/javascript");
-      const depname = request.params["*"];
-      if (!cache.has(depname)) {
-        const filepath = require.resolve(depname);
-        const outdir = join(process.cwd(), "dist", "server");
-        const outfile = join(outdir, depname);
-        await esbuild.build({
-          entryPoints: [filepath],
-          bundle: true,
-          format: "esm",
-          outfile,
-          minify: true,
-          sourcemap: false,
-        });
-        const contents = await readFile(outfile, { encoding: "utf8" });
-        cache.set(depname, contents);
-      }
-      reply.send(cache.get(depname));
-      // fastify compress needs us to return reply to avoid early stream termination
-      return reply;
-    });
-  }
-
-  /**
-   * Decorates the reply object with a hydrate method that, when used, responds with a SSR's custom element response
-   * and client side javascript necessary to hydrate the server response on the client side.
-   */
-  fastify.decorateReply("hydrate", async function hydrate(template, filepath) {
-    const { name } = parse(filepath);
-    this.type("text/html; charset=utf-8");
-    try {
-      await importComponentForSSR(filepath);
-    } catch (err) {
-      fastify.log.error(err);
-    }
-
-    // user provided markup, SSR'd
-    const ssrMarkup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
-    // polyfill for browsers that don't support declarative shadow dom
-    const polyfillMarkup = `<script>${DSD_POLYFILL}</script>`;
-    // live reload snippet that connects to esbuild server and listens for rebuilds and reloads page.
-    const livereloadSnippet = ASSETS_DEVELOPMENT
-      ? `new EventSource('http://localhost:6935/esbuild').addEventListener('change',()=>location.reload());`
-      : "";
-    // wrap user provided component in hydration support and live reload snippet and define component in registry
-    let clientSideScript;
-
-    if (ASSETS_DEVELOPMENT) {
-      clientSideScript = `
-        <script type="module">
-          import '${MODULES_BASE_PATH}/lit/experimental-hydrate-support.js';
-          import El from '${ASSETS_BASE_PATH}/client/${name}.js';
-          customElements.define("${NAME}-${name}",El);
-          ${livereloadSnippet}
-        </script>
-      `;
-    } else {
-      // in production, all scripts are bundled into a single file
-      clientSideScript = `<script type="module" src="${ASSETS_BASE_PATH}/client/${name}.js"></script>`;
-    }
-
-    // render final markup
-    const markup = fastify.podlet.render(this.app.podium, `${ssrMarkup}${polyfillMarkup}${clientSideScript}`);
-
-    // @ts-ignore
-    COMPRESSION ? this.compress(markup) : this.send(markup);
-  });
-
-  /**
-   * Decorates the reply object with an ssrOnly method that, when used, responds with a SSR'd custom element response
-   * with no client side hydration.
-   */
-  fastify.decorateReply("ssrOnly", async function ssrOnly(template, filepath) {
-    this.type("text/html; charset=utf-8");
-    try {
-      await importComponentForSSR(filepath);
-    } catch (err) {
-      fastify.log.error(err);
-    }
-
-    const ssrMarkup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
-    const polyfillMarkup = `<script>${DSD_POLYFILL}</script>`;
-    const markup = fastify.podlet.render(this.app.podium, `${ssrMarkup}${polyfillMarkup}`);
-
-    // @ts-ignore
-    COMPRESSION ? this.compress(markup) : this.send(markup);
-  });
-
-  /**
-   * Decorates the reply object with an csrOnly method that, when used, responds with a custom element's tag markup and
-   * the client side code necessary to define the element. Does not server side render.
-   */
-  fastify.decorateReply("csrOnly", async function csrOnly(template, filepath) {
-    this.type("text/html; charset=utf-8");
-
-    const { name } = parse(filepath);
-    this.type("text/html; charset=utf-8");
-    try {
-      await importComponentForSSR(filepath);
-    } catch (err) {
-      fastify.log.error(err);
-    }
-
-    // live reload snippet that connects to esbuild server and listens for rebuilds and reloads page.
-    const livereloadSnippet = ASSETS_DEVELOPMENT
-      ? `new EventSource('http://localhost:6935/esbuild').addEventListener('change',()=>location.reload());`
-      : "";
-    // wrap user provided component in hydration support and live reload snippet and define component in registry
-    let clientSideScript;
-
-    if (ASSETS_DEVELOPMENT) {
-      clientSideScript = `
-        <script type="module">
-          import El from '${ASSETS_BASE_PATH}/client/${name}.js';
-          customElements.define("${NAME}-${name}",El);
-          ${livereloadSnippet}
-        </script>
-      `;
-    } else {
-      // in production, all scripts are bundled into a single file
-      clientSideScript = `<script type="module" src="${ASSETS_BASE_PATH}/client/${name}.js"></script>`;
-    }
-
-    // render final markup
-    const markup = fastify.podlet.render(this.app.podium, `${template}${clientSideScript}`);
-
-    // @ts-ignore
-    COMPRESSION ? this.compress(markup) : this.send(markup);
-  });
-
-  const CONTENT_PATH = await resolve(join(process.cwd(), "content.js"));
-  const CONTENT_SCHEMA_PATH = await resolve(join(process.cwd(), "schemas/content.js"));
-  const FALLBACK_PATH = await resolve(join(process.cwd(), "fallback.js"));
-  const FALLBACK_SCHEMA_PATH = await resolve(join(process.cwd(), "schemas/fallback.js"));
-
-  if (existsSync(CONTENT_PATH)) {
-    // register user defined validation schema for route if provided
-    // looks for a file named schemas/content.js and if present, imports
-    // and provides to route.
-    const contentOptions = {};
-    if (existsSync(CONTENT_SCHEMA_PATH)) {
-      contentOptions.schema = (await import(CONTENT_SCHEMA_PATH)).default;
-    }
-
-    // builds content route path out of root + app name + the content path value in the podlet manifest
-    // by default this will be / + folder name + / eg. /my-podlet/
-    // content route
-    fastify.get(podlet.content(), contentOptions, async (req, reply) => {
-      // enable timing metrics for this route
-      reply.context.config.timing = true;
-
-      const initialState = JSON.stringify(
-        // @ts-ignore
-        (await setContentState(req, reply.app.podium.context)) || ""
-      );
-
-      const template = `<${NAME}-content version="${VERSION}" locale='${LOCALE}'${translations} initial-state='${initialState}'></${NAME}-content>`;
-
-      switch (RENDER_MODE) {
-        case renderModes.SSR_ONLY:
-          // @ts-ignore
-          await reply.ssrOnly(template, CONTENT_PATH);
-          break;
-        case renderModes.CSR_ONLY:
-          // @ts-ignore
-          await reply.csrOnly(template, CONTENT_PATH);
-          break;
-        case renderModes.HYDRATE:
-          // @ts-ignore
-          await reply.hydrate(template, CONTENT_PATH);
-          break;
-      }
-      return reply;
-    });
-  }
-
-  if (existsSync(FALLBACK_PATH)) {
-    // register user defined validation schema for route if provided
-    // looks for a file named schemas/fallback.js and if present, imports
-    // and provides to route.
-    const fallbackOptions = {};
-    if (existsSync(FALLBACK_SCHEMA_PATH)) {
-      fallbackOptions.schema = (await import(FALLBACK_SCHEMA_PATH)).default;
-    }
-
-    // builds fallback route path out of root + app name + the fallback path value in the podlet manifest
-    // by default this will be / + folder name + /fallback eg. /my-podlet/fallback
-    // fallback route
-    fastify.get(podlet.fallback(), fallbackOptions, async (req, reply) => {
-      // enable timing metrics for this route
-      reply.context.config.timing = true;
-
-      const initialState = JSON.stringify(
-        // @ts-ignore
-        (await setFallbackState(req, reply.app.podium.context)) || ""
-      );
-      const template = `<${NAME}-fallback version="${VERSION}" locale='${LOCALE}'${translations} initial-state='${initialState}'></${NAME}-fallback>`;
-      switch (RENDER_MODE) {
-        case renderModes.SSR_ONLY:
-          // @ts-ignore
-          await reply.ssrOnly(template, FALLBACK_PATH);
-          break;
-        case renderModes.CSR_ONLY:
-          // @ts-ignore
-          await reply.csrOnly(template, FALLBACK_PATH);
-          break;
-        case renderModes.HYDRATE:
-          // @ts-ignore
-          await reply.hydrate(template, FALLBACK_PATH);
-          break;
-      }
-      return reply;
-    });
-  }
-
-  /**
-   * Collect up all metrics and expose on a .metrics property of the fastify instance
-   * which can then be piped into a consumer in server.js
-   */
-  if (METRICS_ENABLED) {
-    const metrics = new Metrics();
-    for (const stream of metricStreams) {
+    for (const stream of this.#metricStreams) {
       stream.on("error", (err) => {
-        fastify.log.error(err);
+        this.#logger.error(err);
       });
-      stream.pipe(metrics);
+      stream.pipe(this.#metrics);
     }
-    fastify.decorate("metrics", metrics);
   }
-};
+
+  /**
+   * Sets up and returns a fastify plugin with everything necessary for a running app.
+   * @returns {import("fastify").FastifyPluginAsync}
+   */
+  plugin() {
+    // return plugin
+    return async (fastify) => {
+      this.#fastify = fastify;
+
+      this.podletPlugin();
+      await this.manifestRoute();
+      this.translations();
+      await this.compression();
+      await this.processExceptionHandlers();
+      this.timingMetrics();
+
+      if (this.#config.get("app.component")) {
+        await this.contentRoute();
+        await this.fallbackRoute();
+        await this.dependenciesRoute();
+        await this.serveAssets();
+      }
+
+      this.metricStreams();
+    };
+  }
+}
 
 export default fp(async function (fastify, { config }) {
-  fastify.register(plugin, { prefix: config.get("app.base") || "/", config });
+  const prefix = config.get("app.base") || "/";
+  const podletServer = new PodletServerPlugin({ config, logger: fastify.log, prefix });
+
+  fastify.register(podletServer.plugin(), { prefix });
+
+  // Expose developer facing APIs using decorate
+  fastify.decorate("setContentState", podletServer.setContentState.bind(podletServer));
+  fastify.decorate("setFallbackState", podletServer.setFallbackState.bind(podletServer));
+  fastify.decorate("config", podletServer.config);
+  fastify.decorate("podlet", podletServer.podlet);
+  fastify.decorate("metrics", podletServer.metrics);
 });
