@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import convict from "convict";
 import { schema, formats } from "./config-schema.js";
+import merge from "lodash.merge";
 
 convict.addFormats(formats);
 
@@ -15,7 +16,8 @@ if (existsSync(`${join(process.cwd(), "config", "schema")}.js`)) {
   userSchema = (await import(`${join(process.cwd(), "config", "schema")}.js`)).default;
 }
 
-const config = convict({ ...schema, ...userSchema });
+merge(schema, userSchema);
+const config = convict(schema);
 
 // we need to do this manually as using NODE_ENV as the default in schema produces some
 // weird results.
