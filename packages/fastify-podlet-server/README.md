@@ -76,6 +76,9 @@ Alternatively, an app might features such as config, localisation, additional se
     domains/
       localhost/
         local.config.json
+  /schemas
+    /content.js
+    /fallback.js
   /locale
     en.json
     no.json
@@ -139,6 +142,11 @@ export default () => [plugin()];
 #### **config [optional]**
 
 This is the folder for configuring the app, see the config section below.
+
+#### **schemas [optional]**
+
+This folder can be used to define a `content.js` or `fallback.js` file that can be used to define validation schemas for your content and fallback routes.
+See the section below on validation.
 
 #### **locale [optional]**
 
@@ -539,3 +547,26 @@ export default async function server(fastify, { config, podlet }) {
 Typescript is supported out of the box, just create content.ts and fallback.ts instead of their js counterparts.
 Esbuild is used to provide this support and as such types are not checked, just stripped out.
 Run tsc on the side to check types as part of your build.
+
+## Route Validation
+
+It is possible to add validation to your content and fallback routes via Fastify's route validation support. 
+Create a file called `schemas/content.js` or `schemas/fallback.js` to add validation and export an object of validation rules.
+
+Example
+```js
+// schemas/content.js
+export default {
+  querystring: {
+      type: 'object',
+      properties: {
+        ids: {
+          type: 'array',
+          default: []
+        },
+      },
+    }
+}
+```
+
+See the [Fastify docs](https://www.fastify.io/docs/latest/Reference/Validation-and-Serialization/) for more
