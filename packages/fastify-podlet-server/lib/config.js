@@ -50,6 +50,16 @@ if (existsSync(join(process.cwd(), "fallback.js"))) {
   config.load({ podlet: { fallback: "/fallback" } });
 }
 
+// auto detect scripts.js
+if (existsSync(join(process.cwd(), "scripts.js"))) {
+  config.load({ assets: { scripts: true } });
+}
+
+// auto detect lazy.js
+if (existsSync(join(process.cwd(), "lazy.js"))) {
+  config.load({ assets: { lazy: true } });
+}
+
 // load comon config overrides if provided
 // common.json is supported so that users can override core config without needing to override for multiple environments or domains
 if (existsSync(join(process.cwd(), `${join("config", "common")}.json`))) {

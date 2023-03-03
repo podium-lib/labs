@@ -141,7 +141,9 @@ class PodletServerPlugin {
   #dsdPolyfill;
   #fastify;
   #podlet;
-  #translations;
+  #translations = "";
+  #scripts;
+  #lazy;
 
   /**
    * @type {(req: import('fastify').FastifyRequest, context: any) => Promise<{ [key: string]: any; [key: number]: any; } | null>}
@@ -177,6 +179,8 @@ class PodletServerPlugin {
       this.#packageJson.dependencies["@podium/podlet"].replace("^", "").replace("~", "")
     );
     this.#dsdPolyfill = readFileSync(new URL("./dsd-polyfill.js", import.meta.url), { encoding: "utf8" });
+    this.#scripts = config.get("assets.scripts");
+    this.#lazy = config.get("assets.lazy");
 
     this.#podlet = new Podlet({
       name: this.#name,
@@ -235,6 +239,24 @@ class PodletServerPlugin {
     const livereloadSnippet = this.#assetsDevelopment
       ? `new EventSource('http://localhost:6935/esbuild').addEventListener('change',()=>location.reload());`
       : "";
+
+    // If using scripts.js, create a link for it.
+    // this typically would not be used in hydrate and csr-only modes but is useful for ssr-only where there is no
+    // bundle loaded by default.
+    let scripts = "";
+    if (this.#scripts) {
+      scripts = `<script type="module" src="${this.#assetsBasePath}/client/scripts.js"></script>`;
+    }
+
+    // If using lazy.js, create a link for it.
+    // this typically would be used to add tracking type scripts that shouldn't block the initial page rendering and aren't immediately needed
+    // other use cases could be for loading behavior scripts related to things that are not needed on initial page load, content inside modals
+    // for example.
+    let lazy = "";
+    if (this.#lazy) {
+      lazy = `<script type="module">addEventListener('load',()=>import('${this.#assetsBasePath}/client/lazy.js'))</script>`;
+    }
+
     // wrap user provided component in hydration support and live reload snippet and define component in registry
     let clientSideScript;
 
@@ -253,7 +275,7 @@ class PodletServerPlugin {
     }
 
     // render final markup
-    const markup = this.#podlet.render(reply.app.podium, `${ssrMarkup}${polyfillMarkup}${clientSideScript}`);
+    const markup = this.#podlet.render(reply.app.podium, `${ssrMarkup}${polyfillMarkup}${clientSideScript}${scripts}${lazy}`);
 
     // @ts-ignore
     this.#compression ? reply.compress(markup) : reply.send(markup);
@@ -269,7 +291,25 @@ class PodletServerPlugin {
 
     const ssrMarkup = Array.from(ssr(html` ${unsafeHTML(template)} `)).join("");
     const polyfillMarkup = `<script>${this.#dsdPolyfill}</script>`;
-    const markup = this.#podlet.render(reply.app.podium, `${ssrMarkup}${polyfillMarkup}`);
+    
+    // If using scripts.js, create a link for it.
+    // this typically would not be used in hydrate and csr-only modes but is useful for ssr-only where there is no
+    // bundle loaded by default.
+    let scripts = "";
+    if (this.#scripts) {
+      scripts = `<script type="module" src="${this.#assetsBasePath}/client/scripts.js"></script>`;
+    }
+
+    // If using lazy.js, create a link for it.
+    // this typically would be used to add tracking type scripts that shouldn't block the initial page rendering and aren't immediately needed
+    // other use cases could be for loading behavior scripts related to things that are not needed on initial page load, content inside modals
+    // for example.
+    let lazy = "";
+    if (this.#lazy) {
+      lazy = `<script type="module">addEventListener('load',()=>import('${this.#assetsBasePath}/client/lazy.js'))</script>`;
+    }
+
+    const markup = this.#podlet.render(reply.app.podium, `${ssrMarkup}${polyfillMarkup}${scripts}${lazy}`);
 
     // @ts-ignore
     this.#compression ? reply.compress(markup) : reply.send(markup);
@@ -290,6 +330,24 @@ class PodletServerPlugin {
     const livereloadSnippet = this.#assetsDevelopment
       ? `new EventSource('http://localhost:6935/esbuild').addEventListener('change',()=>location.reload());`
       : "";
+
+    // If using scripts.js, create a link for it.
+    // this typically would not be used in hydrate and csr-only modes but is useful for ssr-only where there is no
+    // bundle loaded by default.
+    let scripts = "";
+    if (this.#scripts) {
+      scripts = `<script type="module" src="${this.#assetsBasePath}/client/scripts.js"></script>`;
+    }
+
+    // If using lazy.js, create a link for it.
+    // this typically would be used to add tracking type scripts that shouldn't block the initial page rendering and aren't immediately needed
+    // other use cases could be for loading behavior scripts related to things that are not needed on initial page load, content inside modals
+    // for example.
+    let lazy = "";
+    if (this.#lazy) {
+      lazy = `<script type="module">addEventListener('load',()=>import('${this.#assetsBasePath}/client/lazy.js'))</script>`;
+    }
+
     // wrap user provided component in hydration support and live reload snippet and define component in registry
     let clientSideScript;
 
@@ -307,7 +365,7 @@ class PodletServerPlugin {
     }
 
     // render final markup
-    const markup = this.#podlet.render(reply.app.podium, `${template}${clientSideScript}`);
+    const markup = this.#podlet.render(reply.app.podium, `${template}${clientSideScript}${scripts}${lazy}`);
 
     // @ts-ignore
     this.#compression ? reply.compress(markup) : reply.send(markup);

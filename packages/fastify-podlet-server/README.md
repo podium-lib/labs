@@ -455,14 +455,15 @@ Any values defined in this file, can be overridden for specific domains and envi
 | `metrics.timing.timeAllRoutes`    | false   |     | true/false      |
 | `metrics.timing.groupStatusCodes` | true    |     | true/false      |
 | `metrics.timing.enabled`          | true    |     | true/false      |
-| `metrics.enabled`                 | true    |     | true/false      |
 
 ### Assets Config
 
-| Key                  | Default   | ENV | Possible Values |
-| -------------------- | --------- | --- | --------------- |
-| `assets.base`        | "/static" |     |                 |
-| `assets.development` | false     |     | true/false      |
+| Key                  | Default     | ENV | Possible Values |
+| -------------------- | ----------- | --- | --------------- |
+| `assets.base`        | "/static"   |     |                 |
+| `assets.development` | false       |     | true/false      |
+| `assets.scripts`     | auto detect |     | true/false      |
+| `assets.lazy`        | auto detect |     | true/false      |
 
 ## Localisation
 
