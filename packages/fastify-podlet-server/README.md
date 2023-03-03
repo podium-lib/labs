@@ -69,6 +69,8 @@ Alternatively, an app might features such as config, localisation, additional se
   fallback.js
   server.js
   build.js
+  scripts.js
+  lazy.js
   package.json
   /config
     schema.js
@@ -99,12 +101,22 @@ This file must export a default export which is a LitElement class.
 This is the entrypoint for your apps fallback route. You may import dependencies from node_modules and additional source files from /src
 This file must export a default export which is a LitElement class.
 
+#### **scripts.js [optional]**
+
+This file can be used to define additional client side scripts that will be loaded. This is most useful for ssr-only app modes where you may need to add
+additional scripting to the SSR'd content.
+
+#### **lazy.js [optional]**
+
+This file can be used to lazy load additional client side scripts after the window load event has fired. This is useful for adding tracking scripts or other
+scripts that aren't needed on initial page load. Using this can help to get your initial bundle weight down and get pixels on the screen faster.
+
 #### **server.js [optional]**
 
 This is your way to hook into the app server by defining a Fastify plugin.
-You must export the a function that is a Fastify plugin. 
+You must export the a function that is a Fastify plugin.
 
-This function must be async 
+This function must be async
 
 ```js
 export default async function server(fastify, { config, podlet }) {
@@ -132,7 +144,7 @@ This file may import packages from node_modules or files from the /server folder
 This file can be used to hook into the Esbuild build process. It must export a function as a default function and return an array of Esbuild plugins
 
 ```js
-import plugin from 'some-esbuild-plugin';
+import plugin from "some-esbuild-plugin";
 export default () => [plugin()];
 ```
 
@@ -474,7 +486,7 @@ The app supports localisation out of the box. To start using it, you need to do 
 ```json5
 // locale/no.json
 {
-    "how_much_money": "Hvor mye penger har du i boden, egentlig?"
+  how_much_money: "Hvor mye penger har du i boden, egentlig?",
 }
 ```
 
@@ -483,9 +495,9 @@ The app supports localisation out of the box. To start using it, you need to do 
 ```js
 // content.js
 export default class Content extends PodiumPodletElement {
-    render() {
-        return html`<section>${this.t("how_much_money")}</section>`;
-    }
+  render() {
+    return html`<section>${this.t("how_much_money")}</section>`;
+  }
 }
 ```
 
@@ -499,7 +511,7 @@ Under the hood, lit-translate is used. [See the docs](https://www.npmjs.com/pack
 
 ## Customising The Build Pipeline [Advanced]
 
-Under the hood app builds and dev are provided by Esbuild. 
+Under the hood app builds and dev are provided by Esbuild.
 It's possible to hook into this build by creating a `build.js` file and defining an Esbuild plugin or plugins.
 
 ```js
@@ -513,9 +525,7 @@ export default ({ config }) => [
     // setup function gets passed a build object which has various lifecycle hooks
     setup(build) {
       // must provide a filter regex to determine which files in the build will be handled
-      build.onLoad({ filter: /(content|fallback)\.(ts|js)$/ }, async (args) => {
-        
-      });
+      build.onLoad({ filter: /(content|fallback)\.(ts|js)$/ }, async (args) => {});
     },
   },
 ];
