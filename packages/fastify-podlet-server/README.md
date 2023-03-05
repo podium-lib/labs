@@ -575,7 +575,7 @@ See the [Fastify docs](https://www.fastify.io/docs/latest/Reference/Validation-a
 
 Error handling has been added to enable developers to control application errors.
 If you throw an error from app.setContentState or app.setFallbackState this will result in a 500 error. 
-If you throw an error with the appropriate http status, this will result in a matching error.
+You can control which http errors the server should respond with by throwing a [http-errors](https://www.npmjs.com/package/http-errors) error. 
 In addition, an errors object with convenience methods has been added to make throwing different kinds of http errors more streamlined
 See [http-errors](https://www.npmjs.com/package/http-errors) for available methods.
 
