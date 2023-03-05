@@ -571,7 +571,7 @@ export default {
 
 See the [Fastify docs](https://www.fastify.io/docs/latest/Reference/Validation-and-Serialization/) for more
 
-## Errors
+## Error handling
 
 Error handling has been added to enable developers to control application errors.
 If you throw an error from app.setContentState or app.setFallbackState this will result in a 500 error. 
