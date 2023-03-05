@@ -573,7 +573,7 @@ See the [Fastify docs](https://www.fastify.io/docs/latest/Reference/Validation-a
 
 ## Errors
 
-Error handler has been added to enable developers to control application errors.
+Error handling has been added to enable developers to control application errors.
 If you throw an error from app.setContentState or app.setFallbackState this will result in a 500 error. 
 If you throw an error with the appropriate http status, this will result in a matching error.
 In addition, an errors object with convenience methods has been added to make throwing different kinds of http errors more streamlined
