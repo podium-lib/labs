@@ -563,10 +563,6 @@ class PodletServerPlugin {
     return this.#podlet;
   }
 
-  get errors() {
-    return httpError;
-  }
-
   /**
    * We register the Podium podlet Fastify plugin here and pass it the podlet
    * and then collect the metrics
