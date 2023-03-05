@@ -15,6 +15,7 @@ import esbuild from "esbuild";
 import Metrics from "@metrics/client";
 import { SemVer } from "semver";
 import compress from "@fastify/compress";
+import httpError from 'http-errors';
 import resolve from "./resolve.js";
 
 const require = createRequire(import.meta.url);
@@ -485,6 +486,28 @@ class PodletServerPlugin {
   }
 
   /**
+   * Custom http error handler.
+   * Takes http-errors into account when constructing which http error to serve.
+   */
+  async errorHandler() {
+    this.#fastify.setErrorHandler((error, request, reply) => {
+      this.#logger.error(error);
+      const err = httpError.isHttpError(error) ? error : new httpError.InternalServerError();
+
+      if (err.headers) {
+        for (const key in err.headers) {
+          reply.header(key, object[key]);
+        }        
+      }
+
+      reply.status(err.status).send({ 
+        statusCode: err.statusCode,
+        message: err.expose ? err.message : '',  
+      });
+    })
+  }
+
+  /**
    * Serve all assets in the dist folder when an absolute assets.base value is not present.
    * Files are built into the dist folder by either the podlet-dev command or the podlet-build command
    */
@@ -538,6 +561,10 @@ class PodletServerPlugin {
    */
   get podlet() {
     return this.#podlet;
+  }
+
+  get errors() {
+    return httpError;
   }
 
   /**
@@ -603,6 +630,8 @@ class PodletServerPlugin {
         await this.dependenciesRoute();
         await this.serveAssets();
       }
+
+      await this.errorHandler();
 
       this.metricStreams();
     };
