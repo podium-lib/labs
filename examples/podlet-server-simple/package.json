@@ -11,6 +11,6 @@
   "license": "MIT",
   "dependencies": {
     "@podium/experimental-fastify-podlet-server": "0.0.7",
-    "@podium/experimental-lit-base-class": "0.0.2"
+    "@podium/experimental-podium-element": "0.0.1"
   }
 }

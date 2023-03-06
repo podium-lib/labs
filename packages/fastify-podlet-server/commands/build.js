@@ -28,7 +28,7 @@ if (existsSync(CONTENT_FILEPATH)) {
     CONTENT_ENTRYPOINT,
     `import "lit/experimental-hydrate-support.js";import Component from "${CONTENT_FILEPATH}";customElements.define("${NAME}-content",Component);`
   );
-  if (config.get("app.mode") !== "ssr-only") {
+  if (MODE !== "ssr-only") {
     entryPoints.push(CONTENT_ENTRYPOINT);
   }
 }
@@ -39,7 +39,7 @@ if (existsSync(FALLBACK_FILEPATH)) {
     FALLBACK_ENTRYPOINT,
     `import "lit/experimental-hydrate-support.js";import Component from "${FALLBACK_FILEPATH}";customElements.define("${NAME}-fallback",Component);`
   );
-  if (config.get("app.mode") !== "ssr-only") {
+  if (MODE !== "ssr-only") {
     entryPoints.push(FALLBACK_ENTRYPOINT);
   }
 }

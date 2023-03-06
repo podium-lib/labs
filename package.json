@@ -12,7 +12,7 @@
   "license": "ISC",
   "workspaces": [
     "packages/fastify-podlet-server",
-    "packages/lit-base-class"
+    "packages/podium-element"
   ],
   "devDependencies": {
     "bundlesize": "^0.18.1"

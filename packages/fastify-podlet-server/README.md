@@ -2,9 +2,10 @@
 
 This package can be used to bootstrap an opinionated Podium podlet server that provides:
 
-- Shadow dom isolation via Lit custom elements
+- Shadow DOM isolation via Lit custom elements
 - SSR + hydrate, CSR or SSR only
 - Built in localisation support
+- Build in route parameter validation
 - Metrics collection
 - Automatically generated content, fallback and manifest routes
 - A Dev mode with watch/live reload
@@ -16,7 +17,7 @@ This package can be used to bootstrap an opinionated Podium podlet server that p
 Install the following 2 packages:
 
 ```
-npm install @podium/experimental-fastify-podlet-server @podium/experimental-lit-base-class
+npm install @podium/experimental-fastify-podlet-server @podium/experimental-podium-element
 ```
 
 Create a file called `content.js` in your project root that provides a Lit custom element as the default export.
@@ -25,9 +26,9 @@ later in this guide.
 
 ```js
 import { html, css } from "lit";
-import { PodiumPodletElement } from "@podium/experimental-lit-base-class";
+import { PodiumElement } from "@podium/experimental-podium-element";
 
-export default class Content extends PodiumPodletElement {
+export default class Content extends PodiumElement {
   static styles = css`
     .demo {
       color: hotpink;
@@ -278,7 +279,7 @@ export default async function server(fastify, { config, podlet }) {
 
 ```js
 // content.js
-export default class Content extends PodiumPodletElement {
+export default class Content extends PodiumElement {
   render() {
     return html`<section>${this.initialState.key}</section>`;
   }
@@ -318,7 +319,7 @@ Then on the client side, you can use `initialState` to get the api url and start
 
 ```js
 // content.js
-export default class Content extends PodiumPodletElement {
+export default class Content extends PodiumElement {
     static properties = {
         data: { state: true },
     }
@@ -513,10 +514,10 @@ The app supports localisation out of the box. To start using it, you need to do 
 
 ```js
 // content.js
-export default class Content extends PodiumPodletElement {
-  render() {
-    return html`<section>${this.t("how_much_money")}</section>`;
-  }
+export default class Content extends PodiumElement {
+    render() {
+        return html`<section>${this.t("how_much_money")}</section>`;
+    }
 }
 ```
 
