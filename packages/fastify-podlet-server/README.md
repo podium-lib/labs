@@ -76,7 +76,7 @@ Alternatively, an app might features such as config, localisation, additional se
   /config
     schema.js
     common.json
-    domains/
+    hosts/
       localhost/
         local.config.json
   /schemas
@@ -364,9 +364,8 @@ A [pino](https://github.com/pinojs/pino) logger is available in the server as fo
 
 ```js
 export default async function server(app, { logger }) {
-  logger.info('hello from the server');
+  logger.info("hello from the server");
 }
-
 ```
 
 ## Configuration
@@ -377,14 +376,14 @@ Sensible defaults are provided but almost everything can be overridden or extend
 Configuration lives in a folder which must be named `config`. In this folder you can:
 
 - Globally override configuration values in a `config/common.json` file.
-- Override configuration for specific domains and environments in folders named using the pattern `config/domains/<domain name>/<env>.config.json`.
+- Override configuration for specific hosts and environments in folders named using the pattern `config/hosts/<host name>/<env>.config.json`.
 - Add additional config values for use throughout your app via a `schema` defined in `config/schema.js`
 
 See the subsections below for additional information.
 
 ### Common Settings
 
-When you need to override specific configuration settings regardless of context (whether that be domain or environment),
+When you need to override specific configuration settings regardless of context (whether that be host or environment),
 you can create a file called `config/common.json` and overide values by key. (See the list of config keys below for more)
 
 For example, if you wanted to override the app name you would do that like so:
@@ -398,18 +397,18 @@ For example, if you wanted to override the app name you would do that like so:
 }
 ```
 
-### Domain/Environment Specific Settings
+### Host/Environment Specific Settings
 
-2 environment variables can be set which will be used to determine the domain and the environment. These are DOMAIN (defaults to "localhost") and ENV (defaults to "local")
-You are encouraged to set these values differently for each relevant environment that your app will run in. For example, if you have a single domain `www.finn.no`, a staging environment
-and a production environment, then you would set DOMAIN=`www.finn.no` or `localhost` and ENV to either ENV=`local` or `staging` or `production` or perhaps even `test` if needed.
-You will then be able to override config for any combination of these domains and environments by creating folders with json config files in them.
+2 environment variables can be set which will be used to determine the host and the environment. These are HOST (defaults to "localhost") and ENV (defaults to "local")
+You are encouraged to set these values differently for each relevant environment that your app will run in. For example, if you have a single host `www.finn.no`, a staging environment
+and a production environment, then you would set HOST=`www.finn.no` or `localhost` and ENV to either ENV=`local` or `staging` or `production` or perhaps even `test` if needed.
+You will then be able to override config for any combination of these hosts and environments by creating folders with json config files in them.
 
 For example:
 
 ```
 /config
-    /domains
+    /hosts
         /localhost
             /local.config.json
             /staging.config.json
@@ -422,7 +421,7 @@ For example:
             /production.config.json
 ```
 
-Only create those files you need, you might not need any and in any case it probably doesn't make much sense to create some, /config/domains/localhost/production.config.json for example.
+Only create those files you need, you might not need any and in any case it probably doesn't make much sense to create some, /config/hosts/localhost/production.config.json for example.
 
 ### Schemas
 
@@ -449,7 +448,7 @@ export default {
 ```
 
 Default values can be set and specific values can be assigned to environment variables if needed.
-Any values defined in this file, can be overridden for specific domains and environments as described above in the section of domains and environments.
+Any values defined in this file, can be overridden for specific hosts and environments as described above in the section of hosts and environments.
 
 ### List of built in config keys
 
@@ -459,7 +458,7 @@ Any values defined in this file, can be overridden for specific domains and envi
 | ------------------------------ | ----------------------------------------------- | ----------- | -------------------------------------------------- |
 | `app.name`                     | package.json name value                         | APP_NAME    |                                                    |
 | `app.env`                      | local                                           | ENV         |                                                    |
-| `app.domain`                   | localhost                                       | DOMAIN      |                                                    |
+| `app.host`                     | localhost                                       | HOST        |                                                    |
 | `app.port`                     | 8080                                            | PORT        |                                                    |
 | `app.logLevel`                 | INFO                                            | LOG_LEVEL   | "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL" |
 | `app.locale`                   | en-US                                           | LOCALE      |                                                    |
@@ -515,9 +514,9 @@ The app supports localisation out of the box. To start using it, you need to do 
 ```js
 // content.js
 export default class Content extends PodiumElement {
-    render() {
-        return html`<section>${this.t("how_much_money")}</section>`;
-    }
+  render() {
+    return html`<section>${this.t("how_much_money")}</section>`;
+  }
 }
 ```
 
@@ -573,23 +572,24 @@ Run tsc on the side to check types as part of your build.
 
 ## Route Validation
 
-It is possible to add validation to your content and fallback routes via Fastify's route validation support. 
+It is possible to add validation to your content and fallback routes via Fastify's route validation support.
 Create a file called `schemas/content.js` or `schemas/fallback.js` to add validation and export an object of validation rules.
 
 Validation rules use [JSON Schema](https://json-schema.org) syntax
 
 Example
+
 ```js
 // schemas/content.js
 export default {
   querystring: {
-      type: 'object',
-      properties: {
-        id: { type: 'integer' },
-      },
-      required: ["id"],
-    }
-}
+    type: "object",
+    properties: {
+      id: { type: "integer" },
+    },
+    required: ["id"],
+  },
+};
 ```
 
 Note: To encourage best possible security, schemas are required in order to use headers, query parameters and route params.
@@ -598,23 +598,26 @@ If you don't use any of these in your podlet, you don't need to define a schema 
 In general, validation behaviour is as follows:
 
 If no schema file is defined for a given route:
-* All route params and query params are silently stripped and will not be accessible in your app.
-* All headers except the Podium context headers and the Accept-Encoding header are silently stripped and will not be accessible in your app.
+
+- All route params and query params are silently stripped and will not be accessible in your app.
+- All headers except the Podium context headers and the Accept-Encoding header are silently stripped and will not be accessible in your app.
 
 If a schema is defined for a given query param, route param or header:
-* The header will be available in your app and any errors in usage will result in your routes responding with a 400 bad request.
+
+- The header will be available in your app and any errors in usage will result in your routes responding with a 400 bad request.
 
 See the [Fastify docs](https://www.fastify.io/docs/latest/Reference/Validation-and-Serialization/) for more examples and information regarding writing validation schemas.
 
 ## Error handling
 
 Error handling has been added to enable developers to control application errors.
-If you throw an ordinary error from app.setContentState or app.setFallbackState this will result in the route serving a http 500 Internal Server error. 
-You can control which http errors the server should respond with by throwing a [http-errors](https://www.npmjs.com/package/http-errors) error. 
+If you throw an ordinary error from app.setContentState or app.setFallbackState this will result in the route serving a http 500 Internal Server error.
+You can control which http errors the server should respond with by throwing a [http-errors](https://www.npmjs.com/package/http-errors) error.
 In addition, an errors object with http-errors convenience methods has been added to make throwing different kinds of http errors more streamlined
 See [http-errors](https://www.npmjs.com/package/http-errors) for available methods.
 
 Example
+
 ```js
 export default async function server(app, { errors }) {
   app.setContentState(async () => {

@@ -13,12 +13,12 @@ export const schema = {
       arg: "env",
       env: "ENV"
     },
-    domain: {
-      doc: "Domain",
+    host: {
+      doc: "Host",
       format: String,
       default: "localhost",
-      env: "DOMAIN",
-      arg: "domain",
+      env: "HOST",
+      arg: "host",
     },
     base: {
       doc: "The base pathname to mount the app routes on. Defaults to the app name",
