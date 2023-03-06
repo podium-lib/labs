@@ -15,7 +15,9 @@ import esbuild from "esbuild";
 import Metrics from "@metrics/client";
 import { SemVer } from "semver";
 import compress from "@fastify/compress";
-import httpError from 'http-errors';
+import httpError from "http-errors";
+import merge from "lodash.merge";
+import Ajv from "ajv";
 import resolve from "./resolve.js";
 
 const require = createRequire(import.meta.url);
@@ -339,6 +341,67 @@ class PodletServerPlugin {
   }
 
   /**
+   * Sets up AJV validation for routes.
+   * If a schema is not provided for a route, query, params and header values will be stripped
+   */
+  validation() {
+    const schemaCompilers = {
+      body: new Ajv({
+        removeAdditional: "all",
+        coerceTypes: false,
+        allErrors: true,
+      }),
+      params: new Ajv({
+        removeAdditional: "all",
+        coerceTypes: true,
+        allErrors: true,
+      }),
+      querystring: new Ajv({
+        removeAdditional: "all",
+        coerceTypes: true,
+        allErrors: true,
+      }),
+      headers: new Ajv({
+        removeAdditional: "all",
+        coerceTypes: true,
+        allErrors: true,
+      }),
+    };
+
+    this.#fastify.setValidatorCompiler((req) => {
+      if (!req.httpPart) {
+        throw new Error("Missing httpPart");
+      }
+      const compiler = schemaCompilers[req.httpPart];
+      if (!compiler) {
+        throw new Error(`Missing compiler for ${req.httpPart}`);
+      }
+      return compiler.compile(req.schema);
+    });
+  }
+
+  get schemaDefaults() {
+    return {
+      headers: {
+        "podium-debug": { type: "boolean" },
+        "podium-locale": { type: "string", pattern: "^([a-z]{2})(-[A-Z]{2})?$" },
+        "podium-device-type": { enum: ["desktop", "mobile"] },
+        "podium-requested-by": { type: "string" },
+        "podium-mount-origin": {
+          type: "string",
+          pattern:
+            "^(?=.{1,255}$)[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?(?:.[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?)*.?$",
+        },
+        "podium-mount-pathname": { type: "string", pattern: "^/[/.a-zA-Z0-9-]+$" },
+        "podium-public-pathname": { type: "string", pattern: "^/[/.a-zA-Z0-9-]+$" },
+        "accept-encoding": { type: "string" },
+      },
+      querystring: {},
+      params: {},
+    };
+  }
+
+  /**
    * Sets up a content route if needed.
    * Detects the presence of content.js or content.ts and if so, sets up the route.
    * A schema content file is also checked for at schemas/content and if found is used for validation
@@ -356,9 +419,10 @@ class PodletServerPlugin {
       // register user defined validation schema for route if provided
       // looks for a file named schemas/content.js and if present, imports
       // and provides to route.
-      const contentOptions = {};
+      const contentOptions = { schema: this.schemaDefaults };
       if (existsSync(CONTENT_SCHEMA_PATH)) {
-        contentOptions.schema = (await import(CONTENT_SCHEMA_PATH)).default;
+        const userSchema = (await import(CONTENT_SCHEMA_PATH)).default;
+        merge(contentOptions.schema, userSchema);
       }
 
       // builds content route path out of root + app name + the content path value in the podlet manifest
@@ -413,9 +477,10 @@ class PodletServerPlugin {
       // register user defined validation schema for route if provided
       // looks for a file named schemas/fallback.js and if present, imports
       // and provides to route.
-      const fallbackOptions = {};
+      const fallbackOptions = { schema: {} };
       if (existsSync(FALLBACK_SCHEMA_PATH)) {
-        fallbackOptions.schema = (await import(FALLBACK_SCHEMA_PATH)).default;
+        const userSchema = (await import(FALLBACK_SCHEMA_PATH)).default;
+        fallbackOptions.schema = merge(this.schemaDefaults, userSchema);
       }
 
       // builds fallback route path out of root + app name + the fallback path value in the podlet manifest
@@ -492,19 +557,29 @@ class PodletServerPlugin {
   errorHandler() {
     this.#fastify.setErrorHandler((error, request, reply) => {
       this.#logger.error(error);
-      const err = httpError.isHttpError(error) ? error : new httpError.InternalServerError();
 
-      if (err.headers) {
-        for (const key in err.headers) {
-          reply.header(key, err.headers[key]);
-        }        
+      let err;
+
+      // check if we have a validation error
+      if (error.validation) {
+        err = new httpError.BadRequest(`A validation error occurred when validating the ${error.validationContext}`);
+        err.errors = error.validation;
+      } else {
+        err = httpError.isHttpError(error) ? error : new httpError.InternalServerError();
+
+        if (err.headers) {
+          for (const key in err.headers) {
+            reply.header(key, err.headers[key]);
+          }
+        }
       }
 
-      reply.status(err.status).send({ 
+      reply.status(err.status).send({
         statusCode: err.statusCode,
-        message: err.expose ? err.message : '',  
+        message: err.expose ? err.message : "",
+        errors: err.errors || undefined,
       });
-    })
+    });
   }
 
   /**
@@ -619,6 +694,7 @@ class PodletServerPlugin {
       await this.compression();
       await this.processExceptionHandlers();
       this.timingMetrics();
+      this.validation();
 
       if (this.#config.get("app.component")) {
         await this.contentRoute();

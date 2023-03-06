@@ -564,6 +564,8 @@ Run tsc on the side to check types as part of your build.
 It is possible to add validation to your content and fallback routes via Fastify's route validation support. 
 Create a file called `schemas/content.js` or `schemas/fallback.js` to add validation and export an object of validation rules.
 
+Validation rules use [JSON Schema](https://json-schema.org) syntax
+
 Example
 ```js
 // schemas/content.js
@@ -571,16 +573,26 @@ export default {
   querystring: {
       type: 'object',
       properties: {
-        ids: {
-          type: 'array',
-          default: []
-        },
+        id: { type: 'integer' },
       },
+      required: ["id"],
     }
 }
 ```
 
-See the [Fastify docs](https://www.fastify.io/docs/latest/Reference/Validation-and-Serialization/) for more
+Note: To encourage best possible security, schemas are required in order to use headers, query parameters and route params.
+If you don't use any of these in your podlet, you don't need to define a schema file.
+
+In general, validation behaviour is as follows:
+
+If no schema file is defined for a given route:
+* All route params and query params are silently stripped and will not be accessible in your app.
+* All headers except the Podium context headers and the Accept-Encoding header are silently stripped and will not be accessible in your app.
+
+If a schema is defined for a given query param, route param or header:
+* The header will be available in your app and any errors in usage will result in your routes responding with a 400 bad request.
+
+See the [Fastify docs](https://www.fastify.io/docs/latest/Reference/Validation-and-Serialization/) for more examples and information regarding writing validation schemas.
 
 ## Error handling
 
