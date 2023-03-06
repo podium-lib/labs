@@ -29,6 +29,8 @@ const OUTDIR = join(CWD, "dist");
 const CLIENT_OUTDIR = join(OUTDIR, "client");
 const CONTENT_FILEPATH = await resolve(join(CWD, "content.js"));
 const FALLBACK_FILEPATH = await resolve(join(CWD, "fallback.js"));
+const SCRIPTS_FILEPATH = await resolve(join(CWD, "scripts.js"));
+const LAZY_FILEPATH = await resolve(join(CWD, "lazy.js"));
 const SERVER_FILEPATH = await resolve(join(CWD, "server.js"));
 const BUILD_FILEPATH = await resolve(join(CWD, "build.js"));
 
@@ -38,6 +40,12 @@ if (existsSync(CONTENT_FILEPATH)) {
 }
 if (existsSync(FALLBACK_FILEPATH)) {
   entryPoints.push(FALLBACK_FILEPATH);
+}
+if (existsSync(SCRIPTS_FILEPATH)) {
+  entryPoints.push(SCRIPTS_FILEPATH);
+}
+if (existsSync(LAZY_FILEPATH)) {
+  entryPoints.push(LAZY_FILEPATH);
 }
 
 // support user defined plugins via a build.js file
@@ -70,7 +78,7 @@ const buildContext = await context({
 });
 
 // Chokidar provides super fast native file system watching
-const clientWatcher = chokidar.watch(["content.*", "fallback.*", "client/**/*"], {
+const clientWatcher = chokidar.watch(["content.*", "fallback.*", "scripts.*", "lazy.*", "client/**/*"], {
   persistent: true,
   followSymlinks: false,
   cwd: process.cwd(),

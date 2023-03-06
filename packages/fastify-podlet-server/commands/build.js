@@ -17,6 +17,8 @@ const FALLBACK_FILEPATH = await resolve(join(CWD, "fallback.js"));
 const BUILD_FILEPATH = await resolve(join(process.cwd(), "build.js"));
 const CONTENT_ENTRYPOINT = join(OUTDIR, ".build", "content.js");
 const FALLBACK_ENTRYPOINT = join(OUTDIR, ".build", "fallback.js");
+const SCRIPTS_FILEPATH = await resolve(join(CWD, "scripts.js"));
+const LAZY_FILEPATH = await resolve(join(CWD, "lazy.js"));
 
 const entryPoints = [];
 if (existsSync(CONTENT_FILEPATH)) {
@@ -26,7 +28,9 @@ if (existsSync(CONTENT_FILEPATH)) {
     CONTENT_ENTRYPOINT,
     `import "lit/experimental-hydrate-support.js";import Component from "${CONTENT_FILEPATH}";customElements.define("${NAME}-content",Component);`
   );
-  entryPoints.push(CONTENT_ENTRYPOINT);
+  if (config.get("app.mode") !== "ssr-only") {
+    entryPoints.push(CONTENT_ENTRYPOINT);
+  }
 }
 if (existsSync(FALLBACK_FILEPATH)) {
   // write entrypoint file to /dist/.build/content.js
@@ -35,7 +39,15 @@ if (existsSync(FALLBACK_FILEPATH)) {
     FALLBACK_ENTRYPOINT,
     `import "lit/experimental-hydrate-support.js";import Component from "${FALLBACK_FILEPATH}";customElements.define("${NAME}-fallback",Component);`
   );
-  entryPoints.push(FALLBACK_ENTRYPOINT);
+  if (config.get("app.mode") !== "ssr-only") {
+    entryPoints.push(FALLBACK_ENTRYPOINT);
+  }
+}
+if (existsSync(SCRIPTS_FILEPATH)) {
+  entryPoints.push(SCRIPTS_FILEPATH);
+}
+if (existsSync(LAZY_FILEPATH)) {
+  entryPoints.push(LAZY_FILEPATH);
 }
 
 // support user defined plugins via a build.js file
@@ -52,21 +64,15 @@ if (existsSync(BUILD_FILEPATH)) {
   }
 }
 
-/**
- * Build a client side bundle into dist/client unless app.mode has been set to ssr-only,
- * in which case, no client side code is needed.
- */
-if (MODE !== "ssr-only") {
-  await esbuild.build({
-    entryNames: "[name]",
-    plugins,
-    entryPoints,
-    bundle: true,
-    format: "esm",
-    outdir: CLIENT_OUTDIR,
-    minify: true,
-    target: ["es2017"],
-    legalComments: `none`,
-    sourcemap: true,
-  });
-}
+await esbuild.build({
+  entryNames: "[name]",
+  plugins,
+  entryPoints,
+  bundle: true,
+  format: "esm",
+  outdir: CLIENT_OUTDIR,
+  minify: true,
+  target: ["es2017"],
+  legalComments: `none`,
+  sourcemap: true,
+});

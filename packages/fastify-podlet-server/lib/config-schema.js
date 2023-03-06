@@ -131,6 +131,16 @@ export const schema = {
       format: Boolean,
       default: false,
     },
+    scripts: {
+      doc: "Whether scripts.js should be loaded. By default, the existence of the file scripts.js at project root determines this setting.",
+      format: Boolean,
+      default: false,
+    },
+    lazy: {
+      doc: "Whether lazy.js should be loaded. By default, the existence of the file lazy.js at project root determines this setting.",
+      format: Boolean,
+      default: false,
+    },
   },
 };
 
