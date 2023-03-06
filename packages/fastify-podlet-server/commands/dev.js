@@ -7,6 +7,7 @@ import { context } from "esbuild";
 import pino from "pino";
 import sandbox from "fastify-sandbox";
 import { start } from "@fastify/restartable";
+import httpError from 'http-errors';
 import config from "../lib/config.js";
 import fastifyPodletPlugin from "../lib/fastify-podlet-plugin.js";
 import resolve from "../lib/resolve.js";
@@ -105,7 +106,7 @@ const started = await start({
 
     // register user provided plugin using sandbox to enable reloading
     if (existsSync(SERVER_FILEPATH)) {
-      app.register(sandbox, { path: SERVER_FILEPATH, options: { prefix: config.get('app.base'), logger: LOGGER, config, podlet: app.podlet } });
+      app.register(sandbox, { path: SERVER_FILEPATH, options: { prefix: config.get('app.base'), logger: LOGGER, config, podlet: app.podlet, errors: httpError } });
     }
 
     done();

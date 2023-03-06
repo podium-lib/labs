@@ -581,3 +581,29 @@ export default {
 ```
 
 See the [Fastify docs](https://www.fastify.io/docs/latest/Reference/Validation-and-Serialization/) for more
+
+## Error handling
+
+Error handling has been added to enable developers to control application errors.
+If you throw an ordinary error from app.setContentState or app.setFallbackState this will result in the route serving a http 500 Internal Server error. 
+You can control which http errors the server should respond with by throwing a [http-errors](https://www.npmjs.com/package/http-errors) error. 
+In addition, an errors object with http-errors convenience methods has been added to make throwing different kinds of http errors more streamlined
+See [http-errors](https://www.npmjs.com/package/http-errors) for available methods.
+
+Example
+```js
+export default async function server(app, { errors }) {
+  app.setContentState(async () => {
+    throw errors.ImATeapot();
+  });
+}
+```
+
+response from the apps content route will be:
+
+```json
+{
+  "statusCode": 418,
+  "message": "I'm a Teapot"
+}
+```

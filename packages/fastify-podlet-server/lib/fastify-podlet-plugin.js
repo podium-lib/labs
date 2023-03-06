@@ -489,14 +489,14 @@ class PodletServerPlugin {
    * Custom http error handler.
    * Takes http-errors into account when constructing which http error to serve.
    */
-  async errorHandler() {
+  errorHandler() {
     this.#fastify.setErrorHandler((error, request, reply) => {
       this.#logger.error(error);
       const err = httpError.isHttpError(error) ? error : new httpError.InternalServerError();
 
       if (err.headers) {
         for (const key in err.headers) {
-          reply.header(key, object[key]);
+          reply.header(key, err.headers[key]);
         }        
       }
 
@@ -627,7 +627,7 @@ class PodletServerPlugin {
         await this.serveAssets();
       }
 
-      await this.errorHandler();
+      this.errorHandler();
 
       this.metricStreams();
     };

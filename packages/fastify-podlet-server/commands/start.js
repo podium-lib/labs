@@ -3,6 +3,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import fastify from "fastify";
+import httpError from 'http-errors';
 import fastifyPodletPlugin from "../lib/fastify-podlet-plugin.js";
 import config from "../lib/config.js";
 
@@ -19,7 +20,7 @@ const podlet = fastifyApp.podlet;
 const serverFilePath = join(process.cwd(), "server.js");
 if (existsSync(serverFilePath)) {
   const server = (await import(serverFilePath)).default;
-  app.register(server, { prefix: config.get("app.base"), logger: app.log, config, podlet });
+  app.register(server, { prefix: config.get("app.base"), logger: app.log, config, podlet, errors: httpError });
 }
 
 try {
