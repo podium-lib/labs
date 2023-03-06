@@ -61,13 +61,13 @@ const resolveAssetsBasePath = ({ base, prefix, fallback }) => {
  * to the custom element registry.
  * @param {string} filepath
  */
-const importComponentForSSR = async (filepath, config, logger) => {
+const importComponentForSSR = async (filepath, config, logger, cwd) => {
   const NAME = config.get("app.name");
   const DEVELOPMENT = config.get("app.development");
   const TYPE = parse(filepath).name;
-  const OUTDIR = join(process.cwd(), "dist", "server");
+  const OUTDIR = join(cwd, "dist", "server");
   // support user defined plugins via a build.js file
-  const BUILD_FILEPATH = join(process.cwd(), "build.js");
+  const BUILD_FILEPATH = join(cwd, "build.js");
 
   const plugins = [];
   if (existsSync(BUILD_FILEPATH)) {
@@ -120,6 +120,7 @@ const importComponentForSSR = async (filepath, config, logger) => {
 class PodletServerPlugin {
   #config;
   #logger;
+  #cwd;
   #metrics = new Metrics();
   #metricStreams = [];
   #name;
@@ -157,9 +158,10 @@ class PodletServerPlugin {
    */
   #fallbackStateFn = async (req, context) => ({});
 
-  constructor({ config, logger, prefix }) {
+  constructor({ config, logger, prefix, cwd = process.cwd() }) {
     this.#config = config;
     this.#logger = logger;
+    this.#cwd = cwd;
     this.#name = config.get("app.name");
     this.#version = config.get("podlet.version");
     this.#pathname = config.get("podlet.pathname");
@@ -229,7 +231,7 @@ class PodletServerPlugin {
     const { name } = parse(filepath);
     reply.type("text/html; charset=utf-8");
     try {
-      await importComponentForSSR(filepath, this.#config, this.#logger);
+      await importComponentForSSR(filepath, this.#config, this.#logger, this.#cwd);
     } catch (err) {
       this.#logger.error(err);
     }
@@ -287,7 +289,7 @@ class PodletServerPlugin {
   async ssrOnly({ reply, template, filepath }) {
     reply.type("text/html; charset=utf-8");
     try {
-      await importComponentForSSR(filepath, this.#config, this.#logger);
+      await importComponentForSSR(filepath, this.#config, this.#logger, this.#cwd);
     } catch (err) {
       this.#logger.error(err);
     }
@@ -324,7 +326,7 @@ class PodletServerPlugin {
     const { name } = parse(filepath);
     reply.type("text/html; charset=utf-8");
     try {
-      await importComponentForSSR(filepath, this.#config, this.#logger);
+      await importComponentForSSR(filepath, this.#config, this.#logger, this.#cwd);
     } catch (err) {
       this.#logger.error(err);
     }
@@ -387,7 +389,7 @@ class PodletServerPlugin {
    * Empty string as default if matching translation file does not exist
    */
   translations() {
-    const localFilePath = join(process.cwd(), "locale", this.#locale) + ".json";
+    const localFilePath = join(this.#cwd, "locale", this.#locale) + ".json";
     if (existsSync(localFilePath)) {
       try {
         const translation = JSON.parse(readFileSync(localFilePath, { encoding: "utf8" }));
@@ -470,8 +472,8 @@ class PodletServerPlugin {
    * The actual content to render is the custom element markup with additional properties for locale, initial state etc.
    */
   async contentRoute() {
-    const CONTENT_PATH = await resolve(join(process.cwd(), "content.js"));
-    const CONTENT_SCHEMA_PATH = await resolve(join(process.cwd(), "schemas/content.js"));
+    const CONTENT_PATH = await resolve(join(this.#cwd, "content.js"));
+    const CONTENT_SCHEMA_PATH = await resolve(join(this.#cwd, "schemas/content.js"));
 
     if (existsSync(CONTENT_PATH)) {
       // register user defined validation schema for route if provided
@@ -529,8 +531,8 @@ class PodletServerPlugin {
    * The actual content to render is the custom element markup with additional properties for locale, initial state etc.
    */
   async fallbackRoute() {
-    const FALLBACK_PATH = await resolve(join(process.cwd(), "fallback.js"));
-    const FALLBACK_SCHEMA_PATH = await resolve(join(process.cwd(), "schemas/fallback.js"));
+    const FALLBACK_PATH = await resolve(join(this.#cwd, "fallback.js"));
+    const FALLBACK_SCHEMA_PATH = await resolve(join(this.#cwd, "schemas/fallback.js"));
     if (existsSync(FALLBACK_PATH)) {
       // register user defined validation schema for route if provided
       // looks for a file named schemas/fallback.js and if present, imports
@@ -588,7 +590,7 @@ class PodletServerPlugin {
         const depname = request.params["*"];
         if (!cache.has(depname)) {
           const filepath = require.resolve(depname);
-          const outdir = join(process.cwd(), "dist", "server");
+          const outdir = join(this.#cwd, "dist", "server");
           const outfile = join(outdir, depname);
           await esbuild.build({
             entryPoints: [filepath],
@@ -647,7 +649,7 @@ class PodletServerPlugin {
   async serveAssets() {
     if (!isAbsoluteURL(this.#assetsBasePath)) {
       this.#fastify.register(fastifyStatic, {
-        root: join(process.cwd(), "dist"),
+        root: join(this.#cwd, "dist"),
         prefix: this.#assetsBasePathMountPoint,
       });
     }

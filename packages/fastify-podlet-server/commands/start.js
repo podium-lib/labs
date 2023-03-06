@@ -1,30 +1,27 @@
-#!/usr/bin/env node
+import { start } from "../api/start.js"
+import configuration from "../lib/config.js";
 
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import fastify from "fastify";
-import httpError from 'http-errors';
-import fastifyPodletPlugin from "../lib/fastify-podlet-plugin.js";
-import config from "../lib/config.js";
+export const command = "start";
 
-const app = fastify({ logger: true, ignoreTrailingSlash: true });
+export const aliases = ["s"];
 
-app.register(fastifyPodletPlugin, { prefix: config.get("app.base"), config });
+export const describe = `Starts the app in production mode`;
 
-/** @type {any} */
-let fastifyApp = app;
-/** @type {import("@podium/podlet").default} */
-const podlet = fastifyApp.podlet;
+export const builder = (yargs) => {
+  yargs.example("podlet start");
 
-// Load user server.js file if provided.
-const serverFilePath = join(process.cwd(), "server.js");
-if (existsSync(serverFilePath)) {
-  const server = (await import(serverFilePath)).default;
-  app.register(server, { prefix: config.get("app.base"), logger: app.log, config, podlet, errors: httpError });
-}
+  yargs.options({
+    cwd: {
+      describe: `Alter the current working directory. Defaults to the directory where the command is being run.`,
+      default: process.cwd(),
+    },
+  });
 
-try {
-await app.listen({ port: config.get("app.port") });
-} catch(err) {
-  console.log(err)
-}
+  return yargs.argv;
+};
+
+export const handler = async (argv) => {
+  const { cwd } = argv;
+  const config = await configuration({ cwd });
+  await start({ config, cwd });
+};
