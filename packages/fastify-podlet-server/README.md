@@ -345,6 +345,17 @@ export default async function server(fastify, { config, podlet }) {
 }
 ```
 
+## Logger
+
+A [pino](https://github.com/pinojs/pino) logger is available in the server as follows
+
+```js
+export default async function server(app, { logger }) {
+  logger.info('hello from the server');
+}
+
+```
+
 ## Configuration
 
 The app comes with a built in configuration system based on [Convict](https://www.npmjs.com/package/convict).
@@ -582,3 +593,29 @@ If a schema is defined for a given query param, route param or header:
 * The header will be available in your app and any errors in usage will result in your routes responding with a 400 bad request.
 
 See the [Fastify docs](https://www.fastify.io/docs/latest/Reference/Validation-and-Serialization/) for more examples and information regarding writing validation schemas.
+
+## Error handling
+
+Error handling has been added to enable developers to control application errors.
+If you throw an ordinary error from app.setContentState or app.setFallbackState this will result in the route serving a http 500 Internal Server error. 
+You can control which http errors the server should respond with by throwing a [http-errors](https://www.npmjs.com/package/http-errors) error. 
+In addition, an errors object with http-errors convenience methods has been added to make throwing different kinds of http errors more streamlined
+See [http-errors](https://www.npmjs.com/package/http-errors) for available methods.
+
+Example
+```js
+export default async function server(app, { errors }) {
+  app.setContentState(async () => {
+    throw errors.ImATeapot();
+  });
+}
+```
+
+response from the apps content route will be:
+
+```json
+{
+  "statusCode": 418,
+  "message": "I'm a Teapot"
+}
+```

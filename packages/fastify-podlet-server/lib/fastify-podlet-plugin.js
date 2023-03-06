@@ -554,7 +554,7 @@ class PodletServerPlugin {
    * Custom http error handler.
    * Takes http-errors into account when constructing which http error to serve.
    */
-  async errorHandler() {
+  errorHandler() {
     this.#fastify.setErrorHandler((error, request, reply) => {
       this.#logger.error(error);
 
@@ -564,13 +564,6 @@ class PodletServerPlugin {
       if (error.validation) {
         err = new httpError.BadRequest(`A validation error occurred when validating the ${error.validationContext}`);
         err.errors = error.validation;
-        // validationContext will be 'body' or 'params' or 'headers' or 'query'
-        // reply.status(400).send({
-        //   statusCode: 400,
-        //   message: `A validation error occurred when validating the ${error.validationContext}...`,
-        //   errors: error.validation,
-        // });
-        // return reply;
       } else {
         err = httpError.isHttpError(error) ? error : new httpError.InternalServerError();
 
@@ -710,7 +703,7 @@ class PodletServerPlugin {
         await this.serveAssets();
       }
 
-      await this.errorHandler();
+      this.errorHandler();
 
       this.metricStreams();
     };
