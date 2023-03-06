@@ -2,7 +2,7 @@
 import { LitElement } from "lit";
 import { registerTranslateConfig, get } from "lit-translate";
 
-export class PodiumPodletElement extends LitElement {
+export class PodiumElement extends LitElement {
   #translationSupport = false;
 
   /**

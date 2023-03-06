@@ -1,7 +1,7 @@
 import { html, css } from "lit";
-import { PodiumPodletElement } from "@podium/experimental-lit-base-class";
+import { PodiumElement } from "@podium/experimental-podium-element";
 
-export default class Content extends PodiumPodletElement {
+export default class Content extends PodiumElement {
   static styles = css`
     .demo {
       color: hotpink;

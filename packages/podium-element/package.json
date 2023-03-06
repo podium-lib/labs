@@ -1,5 +1,5 @@
 {
-  "name": "@podium/experimental-lit-base-class",
+  "name": "@podium/experimental-podium-element",
   "version": "0.0.3",
   "description": "",
   "main": "index.js",
