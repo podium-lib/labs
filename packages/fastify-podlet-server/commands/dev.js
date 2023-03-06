@@ -106,7 +106,7 @@ const started = await start({
 
     // register user provided plugin using sandbox to enable reloading
     if (existsSync(SERVER_FILEPATH)) {
-      app.register(sandbox, { path: SERVER_FILEPATH, options: { prefix: config.get('app.base'), config, podlet: app.podlet, errors: httpError } });
+      app.register(sandbox, { path: SERVER_FILEPATH, options: { prefix: config.get('app.base'), logger: LOGGER, config, podlet: app.podlet, errors: httpError } });
     }
 
     done();

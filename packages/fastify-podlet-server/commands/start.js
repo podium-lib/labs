@@ -20,7 +20,7 @@ const podlet = fastifyApp.podlet;
 const serverFilePath = join(process.cwd(), "server.js");
 if (existsSync(serverFilePath)) {
   const server = (await import(serverFilePath)).default;
-  app.register(server, { prefix: config.get("app.base"), config, podlet, errors: httpError });
+  app.register(server, { prefix: config.get("app.base"), logger: app.log, config, podlet, errors: httpError });
 }
 
 try {

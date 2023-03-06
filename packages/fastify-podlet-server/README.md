@@ -345,6 +345,17 @@ export default async function server(fastify, { config, podlet }) {
 }
 ```
 
+## Logger
+
+A [pino](https://github.com/pinojs/pino) logger is available in the server as follows
+
+```js
+export default async function server(app, { logger }) {
+  logger.info('hello from the server');
+}
+
+```
+
 ## Configuration
 
 The app comes with a built in configuration system based on [Convict](https://www.npmjs.com/package/convict).
