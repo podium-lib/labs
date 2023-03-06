@@ -10,7 +10,7 @@ convict.addFormats(formats);
 // load additional config if provided
 // users can define a config schema file with addition config options and this
 // will be merged into the base config and can then be overridden as needed
-// for specific environments, domains or globally.
+// for specific environments, hosts or globally.
 let userSchema = {};
 if (existsSync(`${join(process.cwd(), "config", "schema")}.js`)) {
   userSchema = (await import(`${join(process.cwd(), "config", "schema")}.js`)).default;
@@ -26,8 +26,8 @@ if (process.env.NODE_ENV === "development") {
   config.set("app.env", "local");
 }
 
-// The expectation is that DOMAIN and NODE_ENV env vars will be set in production
-const domain = config.get("app.domain");
+// The expectation is that HOST and NODE_ENV env vars will be set in production
+const host = config.get("app.host");
 const env = config.get("app.env");
 
 // programmatically set defaults for cases
@@ -61,15 +61,15 @@ if (existsSync(join(process.cwd(), "lazy.js"))) {
 }
 
 // load comon config overrides if provided
-// common.json is supported so that users can override core config without needing to override for multiple environments or domains
+// common.json is supported so that users can override core config without needing to override for multiple environments or hosts
 if (existsSync(join(process.cwd(), `${join("config", "common")}.json`))) {
   config.loadFile(join(process.cwd(), `${join("config", "common")}.json`));
 }
 
 // load specific overrides if provided
-// fine grained config overrides. Domain and env overrides etc.
-if (existsSync(join(process.cwd(), `${join("config", "domains", domain, "config")}.${env}.json`))) {
-  config.loadFile(join(process.cwd(), `${join("config", "domains", domain, "config")}.${env}.json`));
+// fine grained config overrides. Hosts and env overrides etc.
+if (existsSync(join(process.cwd(), `${join("config", "hosts", host, "config")}.${env}.json`))) {
+  config.loadFile(join(process.cwd(), `${join("config", "hosts", host, "config")}.${env}.json`));
 }
 
 // once all is setup, validate.
