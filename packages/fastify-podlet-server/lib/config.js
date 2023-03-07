@@ -39,25 +39,21 @@ export default async function configuration({ cwd = process.cwd() }) {
 
   // name defaults to the name field in package.json
   const { name } = JSON.parse(await readFile(join(cwd, "package.json"), { encoding: "utf8" }));
-  // makes it possible to change the path that the app is mounted at by changing config.
-  // {
-  //   "app": { "base": "/" }
-  // }
-  config.load({ app: { name, base: `/${name}` } });
+  config.load({ app: { name } });
 
   // if a fallback is defined, set the fallback path
   // this is so that the Podlet object fallback setting does not get set if no fallback is defined.
-  if (existsSync(join(cwd, "fallback.js"))) {
+  if (existsSync(join(cwd, "fallback.js")) || existsSync(join(cwd, "fallback.ts"))) {
     config.load({ podlet: { fallback: "/fallback" } });
   }
 
   // auto detect scripts.js
-  if (existsSync(join(cwd, "scripts.js"))) {
+  if (existsSync(join(cwd, "scripts.js")) || existsSync(join(cwd, "scripts.ts"))) {
     config.load({ assets: { scripts: true } });
   }
 
   // auto detect lazy.js
-  if (existsSync(join(cwd, "lazy.js"))) {
+  if (existsSync(join(cwd, "lazy.js")) || existsSync(join(cwd, "lazy.ts"))) {
     config.load({ assets: { lazy: true } });
   }
 
@@ -73,7 +69,18 @@ export default async function configuration({ cwd = process.cwd() }) {
     config.loadFile(join(cwd, `${join("config", "hosts", host, "config")}.${env}.json`));
   }
 
+  // validate the name field of package.json
+  if (name === config.get("app.name") && !/^[a-z-]*$/.test(name)) {
+    throw new Error(`Name field in package.json was not usable as a default app name because it uses characters other than a-z and -.\nYou have 2 choices:\n1. Either set it to a different name using lower case letters and the - character\n2. keep it as is and define the app name in config.\nA good place for this is in /config/common.json\neg. { "app": { "name": "my-app-name-here" } }"`)
+  }
+
+  // If app.base is not explicitly user set, then default it to the same as app.name with a leading slash
+  if (config.get("app.base") === "") {
+    config.load({ app: { base: `/${config.get("app.name")}` } });
+  }
+
   // once all is setup, validate.
   config.validate();
+
   return config;
 }
