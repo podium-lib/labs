@@ -36,6 +36,20 @@ export default fp(async function importElement(
    * to the custom element registry.
    */
   fastify.decorate("importElement", async (path = "") => {
+    const { name } = parse(path);
+
+    if (!name || name === ".") {
+      throw new Error(`Invalid path '${path}' given to importElement. path must be a path (relative or absolute) to a file including filename and extension.`);
+    }
+
+    const outfile = join(outdir, `${name}.js`);
+
+    // if in production mode and the component has already been defined,
+    // no more work is needed, so we bail early
+    if (!development && customElements.get(`${appName}-${name}`)) {
+      return;
+    }
+
     let filepath = "";
     try {
       filepath = require.resolve(path, { paths: [cwd] });
@@ -43,14 +57,6 @@ export default fp(async function importElement(
       fastify.log.error(err);
       // throw in production
       if (!development) throw err;
-    }
-    const { name } = parse(filepath);
-    const outfile = join(outdir, `${name}.js`);
-
-    // if in production mode and the component has already been defined,
-    // no more work is needed, so we bail early
-    if (!development && customElements.get(`${appName}-${name}`)) {
-      return;
     }
 
     // bundle up SSR version of component. I wish this wasn't necessary but all experimentation so far

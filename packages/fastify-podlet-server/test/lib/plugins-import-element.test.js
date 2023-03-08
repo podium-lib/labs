@@ -17,6 +17,38 @@ afterEach(async (t) => {
   await rm(tmp, { recursive: true, force: true });
 });
 
+test("invalid path given throws", async (t) => {
+  const app = fastify({ logger: false });
+  await app.register(plugin, { appName: "test-app", cwd: tmp });
+  try {
+      // @ts-ignore
+    await app.importElement("");
+  } catch(err) {
+      t.match(
+        err.message, "Invalid path '' given to importElement",
+        "customElement registry should contain test-app-element"
+      );
+  }
+  try {
+      // @ts-ignore
+    await app.importElement("./");
+  } catch(err) {
+      t.match(
+        err.message, "Invalid path './' given to importElement",
+        "customElement registry should contain test-app-element"
+      );
+  }
+  try {
+      // @ts-ignore
+    await app.importElement("/");
+  } catch(err) {
+      t.match(
+        err.message, "Invalid path '/' given to importElement",
+        "customElement registry should contain test-app-element"
+      );
+  }
+});
+
 test("decorator importElement imports element into registry", async (t) => {
   const app = fastify({ logger: false });
   await app.register(plugin, { appName: "test-app", cwd: tmp });
