@@ -1,9 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
 import { join, parse } from "node:path";
+import { createRequire } from "node:module";
 import esbuild from "esbuild";
 import fp from "fastify-plugin";
 
-export default fp(async function importComponent(
+const require = createRequire(import.meta.url);
+
+export default fp(async function importElement(
   fastify,
   { appName = "", development = false, plugins = [], cwd = process.cwd() }
 ) {
@@ -33,7 +35,15 @@ export default fp(async function importComponent(
    * In development mode, every call to this function will yield a fresh version of the custom element being re-registered
    * to the custom element registry.
    */
-  fastify.decorate("importComponent", async (filepath = "") => {
+  fastify.decorate("importElement", async (path = "") => {
+    let filepath = "";
+    try {
+      filepath = require.resolve(path, { paths: [cwd] });
+    } catch (err) {
+      fastify.log.error(err);
+      // throw in production
+      if (!development) throw err;
+    }
     const { name } = parse(filepath);
     const outfile = join(outdir, `${name}.js`);
 
@@ -43,10 +53,8 @@ export default fp(async function importComponent(
       return;
     }
 
-    if (!existsSync(filepath)) {
-      // handle
-    }
-
+    // bundle up SSR version of component. I wish this wasn't necessary but all experimentation so far
+    // has led me to the conclusion that we need to bundle an SSR to avoid lit complaining about client/server hydration mismatches
     try {
       await esbuild.build({
         entryPoints: [filepath],
@@ -61,31 +69,37 @@ export default fp(async function importComponent(
       });
     } catch (err) {
       fastify.log.error(err);
+      if (!development) throw err;
     }
 
+    // import fresh copy of the custom element using date string to break module cache
+    // in development, this makes it possible for the dev to keep making changes to the file and on
+    // subsequent calls to importComponent, the newest version will be imported.
     let Element;
     try {
-      // import fresh copy of the custom element using date string
       Element = (await import(`${outfile}?s=${Date.now()}`)).default;
     } catch (err) {
       fastify.log.error(err);
+      if (!development) throw err;
     }
 
+    // if already defined from a previous request, delete from registry
     try {
-      // if already defined from a previous request, delete from registry
       if (customElements.get(`${appName}-${name}`)) {
         // @ts-ignore
         customElements.__definitions.delete(`${appName}-${name}`);
       }
     } catch (err) {
       fastify.log.error(err);
+      if (!development) throw err;
     }
 
+    // define newly imported custom element in the registry
     try {
-      // define newly imported custom element in the registry
       customElements.define(`${appName}-${name}`, Element);
     } catch (err) {
       fastify.log.error(err);
+      if (!development) throw err;
     }
   });
 });
