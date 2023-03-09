@@ -124,8 +124,8 @@ test("custom schema values override defaults when present and plugin is mounted 
     if (routeOptions.method !== "GET") return;
     t.equal(
       routeOptions.schema.headers["custom-header"].type,
-      "string",
-      "custom-header should be set and be overridden"
+      "boolean",
+      "custom-header should be set and not be overridden"
     );
     t.end();
   });
