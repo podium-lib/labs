@@ -1,7 +1,7 @@
 import MetricsClient from "@metrics/client";
 import fp from "fastify-plugin";
 
-export default fp(async function metrics(fastify, { config, podlet }) {
+export default fp(async function metrics(fastify) {
   // add metrics client
   fastify.decorate("metrics", new MetricsClient());
 

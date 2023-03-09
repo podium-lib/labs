@@ -99,7 +99,39 @@ test("custom schema values override defaults when present and plugin is mounted 
   });
 
   // register a route to trigger route hooks
-  app.get("/custom-prefix/route", () => {});
+  app.get("/route", () => {});
+
+  await app.listen({ port: 0 });
+  await app.close();
+  await rm(tmp, { recursive: true, force: true });
+});
+
+test("custom schema values override defaults when present and plugin is mounted under a prefix path at root route", async (t) => {
+  const { app } = t.context;
+
+  await writeFile(
+    join(tmp, "schemas", "route.json"),
+    JSON.stringify({
+      headers: {
+        ["custom-header"]: { type: "string" },
+      },
+    })
+  );
+
+  await app.register(plugin, { prefix: "/custom-prefix", cwd: tmp, defaults });
+
+  app.addHook("onRoute", (routeOptions) => {
+    if (routeOptions.method !== "GET") return;
+    t.equal(
+      routeOptions.schema.headers["custom-header"].type,
+      "string",
+      "custom-header should be set and be overridden"
+    );
+    t.end();
+  });
+
+  // register a route to trigger route hooks
+  app.get("/", () => {});
 
   await app.listen({ port: 0 });
   await app.close();
@@ -132,6 +164,70 @@ test("root path handled via mappings plugin option", async (t) => {
 
   // register a route to trigger route hooks
   app.get("/", () => {});
+
+  await app.listen({ port: 0 });
+  await app.close();
+  await rm(tmp, { recursive: true, force: true });
+});
+
+test("prefix given and root path handled via mappings plugin option", async (t) => {
+  const { app } = t.context;
+
+  await writeFile(
+    join(tmp, "schemas", "route.json"),
+    JSON.stringify({
+      headers: {
+        ["custom-header"]: { type: "string" },
+      },
+    })
+  );
+
+  await app.register(plugin, { prefix: "/my-test", cwd: tmp, defaults, mappings: { "/": "route.json" } });
+
+  app.addHook("onRoute", (routeOptions) => {
+    if (routeOptions.method !== "GET") return;
+    t.equal(
+      routeOptions.schema.headers["custom-header"].type,
+      "string",
+      "custom-header should be set and be overridden"
+    );
+    t.end();
+  });
+
+  // register a route to trigger route hooks
+  app.get("/", () => {});
+
+  await app.listen({ port: 0 });
+  await app.close();
+  await rm(tmp, { recursive: true, force: true });
+});
+
+test("prefix given and non root path handled via mappings plugin option", async (t) => {
+  const { app } = t.context;
+
+  await writeFile(
+    join(tmp, "schemas", "route.json"),
+    JSON.stringify({
+      headers: {
+        ["custom-header"]: { type: "string" },
+      },
+    })
+  );
+
+  await app.register(plugin, { prefix: "/my-test", cwd: tmp, defaults, mappings: { "/test": "route.json" } });
+
+  app.addHook("onRoute", (routeOptions) => {
+    if (routeOptions.method !== "GET") return;
+    t.equal(
+      routeOptions.schema.headers["custom-header"].type,
+      "string",
+      "custom-header should be set and be overridden"
+    );
+    t.end();
+  });
+
+  // register a route to trigger route hooks
+  app.get("/test", () => {});
 
   await app.listen({ port: 0 });
   await app.close();

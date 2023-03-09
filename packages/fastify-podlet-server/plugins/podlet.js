@@ -24,6 +24,14 @@ export default fp(async function podlet(
   const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), { encoding: "utf8" }));
   const podiumVersion = new SemVer(packageJson.dependencies["@podium/podlet"].replace("^", "").replace("~", ""));
 
+  fastify.get(podlet.manifest(), async (req, reply) => {
+    // enable timing metrics for this route
+    // @ts-ignore
+    reply.context.config.timing = true;
+    reply.type("application/json");
+    return JSON.stringify(podlet);
+  });
+
   /**
    * Generate a metric for which major version of the Podium podlet is being run
    * Metric is pushed into the podlet metrics stream which is then collected
@@ -43,4 +51,19 @@ export default fp(async function podlet(
 
   // @ts-ignore
   fastify.metricStreams.push(podlet.metrics);
+
+  if (development) {
+    // wrap the markup in a podlet render call to get templating when in dev mode
+    fastify.addHook("onSend", (request, reply, /** @type {string} */ payload, done) => {
+      let newPayload = payload;
+      const contentType = reply.getHeader("content-type") || "";
+      if (typeof contentType === "string") {
+        if (contentType.includes("html")) {
+          // @ts-ignore
+          newPayload = podlet.render(reply.app.podium, payload);
+        }
+      }
+      done(null, newPayload);
+    });
+  }
 });

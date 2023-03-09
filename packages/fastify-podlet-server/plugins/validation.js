@@ -59,15 +59,43 @@ export default fp(async function validation(fastify, { prefix = "", cwd = proces
     // only handle GET requests
     if (routeOptions.method !== "GET") return;
     // strip off provided base
-    const path = routeOptions.routePath.replace(prefix, "");
+
+    const { routePath } = routeOptions;
+
     let schemaPath;
 
+
+    // PREFIXES
+    // /
+    // ""
+    // /test
+    // /test/
+
+
+    // SHOULD BE /
+    // prefix / routePath / = //
+    // prefix "" routePath / = /
+    
+    // SHOULD BE /test/test
+    // prefix /test routePath /test = /test/test
+    // prefix /test/ routePath /test/ = /test/test
+    // prefix /test/ routePath /test = /test/test
+    // prefix /test routePath /test/ = /test/test
+    
+    // SHOULD BE /test
+    // prefix / routePath /test/ = //test/
+    // prefix / routePath /test = //test
+    // prefix /test routePath / = /test/
+
+    // INVALID
+    // prefix "" routePath "" = "" 
+
     // check provided mappings
-    if (mappings[path]) {
-      schemaPath = join(cwd, `schemas/${mappings[path]}`);
+    if (mappings[routePath || "/"]) {
+      schemaPath = join(cwd, `schemas/${mappings[routePath || "/"]}`);
     } else {
       // general case
-      schemaPath = join(cwd, `schemas${path}.json`);
+      schemaPath = join(cwd, `schemas${routePath}.json`);
     }
 
     routeOptions.schema = {};
