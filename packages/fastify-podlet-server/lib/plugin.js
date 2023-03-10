@@ -69,10 +69,10 @@ export default fp(async function (fastify, {
   pathname = "/",
   manifest = "/manifest.json",
   content = "/",
-  fallback = null,
+  fallback = "",
   development = false,
   version = null,
-  locale = null,
+  locale = "",
   plugins = [],
   cwd = process.cwd(),
   lazy = false,
@@ -84,8 +84,8 @@ export default fp(async function (fastify, {
   mode = "hydrate",
 }) {
   const assetBase = isAbsoluteURL(base) ? base : joinURLPathSegments(prefix, base);
-  const contentFilePath = await resolve(join(process.cwd(), "./content.js"));
-  const fallbackFilePath = await resolve(join(process.cwd(), "./fallback.js"));
+  const contentFilePath = await resolve(join(cwd, "./content.js"));
+  const fallbackFilePath = await resolve(join(cwd, "./fallback.js"));
 
   let podlet;
   let metrics;

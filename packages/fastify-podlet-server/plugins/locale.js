@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import fp from "fastify-plugin";
 
-export default fp(async function locale(fastify, { cwd = process.cwd(), locale }) {
+export default fp(async function locale(fastify, { cwd = process.cwd(), locale = "" }) {
     const localFilePath = join(cwd, "locale", locale) + ".json";
     if (existsSync(localFilePath)) {
       try {
