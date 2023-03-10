@@ -4,6 +4,10 @@ import fastify from "fastify";
 import httpError from "http-errors";
 import fastifyPodletPlugin from "../lib/fastify-podlet-plugin.js";
 
+/**
+ * @typedef {import("fastify").FastifyInstance & { podlet: import("@podium/podlet").default }} FastifyInstance
+ */
+
 export async function start({ config, cwd = process.cwd() }) {
   // read from build.js
   const BUILD_FILEPATH = join(cwd, "build.js");
@@ -21,7 +25,9 @@ export async function start({ config, cwd = process.cwd() }) {
     }
   }
 
-  const app = fastify({ logger: true, ignoreTrailingSlash: true });
+  const app = /** @type {FastifyInstance}*/ (
+    /**@type {unknown}*/ (fastify({ logger: true, ignoreTrailingSlash: true }))
+  );
   app.register(fastifyPodletPlugin, {
     prefix: config.get("app.base") || "/",
     pathname: config.get("podlet.pathname"),
@@ -43,10 +49,7 @@ export async function start({ config, cwd = process.cwd() }) {
     mode: config.get("app.mode"),
   });
 
-  /** @type {any} */
-  let fastifyApp = app;
-  /** @type {import("@podium/podlet").default} */
-  const podlet = fastifyApp.podlet;
+  const { podlet } = app;
 
   // Load user server.js file if provided.
   const serverFilePath = join(cwd, "server.js");
