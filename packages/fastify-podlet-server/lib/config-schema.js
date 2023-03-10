@@ -124,7 +124,7 @@ export const schema = {
     base: {
       doc: "Base path or URL for assets. Eg. /static or https://assets.cdn.com/static. DO NOT include trailing slash.",
       format: String,
-      default: "",
+      default: "/static",
     },
     development: {
       doc: "Asset development mode. When enabled, content and fallback will be wrapped in development scripts. Should be set to false when in production.",

@@ -8,7 +8,7 @@
   "exports": {
     "./config": "./lib/config.js",
     "./schema": "./lib/config-schema.js",
-    "./plugin": "./lib/fastify-podlet-plugin.js",
+    "./plugin": "./lib/plugin.js",
     "./commands": "./commands/index.js",
     "./build": "./commands/build.js",
     "./start": "./commands/start.js",
