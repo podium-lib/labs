@@ -6,7 +6,7 @@ import pino from "pino";
 import sandbox from "fastify-sandbox";
 import { start } from "@fastify/restartable";
 import httpError from "http-errors";
-import fastifyPodletPlugin from "../lib/fastify-podlet-plugin.js";
+import fastifyPodletPlugin from "../lib/plugin.js";
 import resolve from "../lib/resolve.js";
 
 export async function dev({ config, cwd = process.cwd() }) {

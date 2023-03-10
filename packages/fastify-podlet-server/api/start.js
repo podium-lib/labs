@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import fastify from "fastify";
 import httpError from "http-errors";
-import fastifyPodletPlugin from "../lib/fastify-podlet-plugin.js";
+import fastifyPodletPlugin from "../lib/plugin.js";
 
 /**
  * @typedef {import("fastify").FastifyInstance & { podlet: import("@podium/podlet").default }} FastifyInstance
