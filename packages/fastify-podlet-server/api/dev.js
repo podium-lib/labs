@@ -102,7 +102,26 @@ export async function dev({ config, cwd = process.cwd() }) {
         });
       }
 
-      app.register(fastifyPodletPlugin, { config });
+      app.register(fastifyPodletPlugin, {
+        prefix: config.get("app.base") || "/",
+        pathname: config.get("podlet.pathname"),
+        manifest: config.get("podlet.manifest"),
+        content: config.get("podlet.content"),
+        fallback: config.get("podlet.fallback"),
+        base: config.get("assets.base"),
+        plugins,
+        name: config.get("app.name"),
+        development: config.get("app.development"),
+        version: config.get("podlet.version"),
+        locale: config.get("app.locale"),
+        lazy: config.get("assets.lazy"),
+        scripts: config.get("assets.scripts"),
+        compression: config.get("app.compression"),
+        grace: config.get("app.grace"),
+        timeAllRoutes: config.get("metrics.timing.timeAllRoutes"),
+        groupStatusCodes: config.get("metrics.timing.groupStatusCodes"),
+        mode: config.get("app.mode"),
+      });
 
       app.addHook("onError", (request, reply, error, done) => {
         buildContext.dispose();

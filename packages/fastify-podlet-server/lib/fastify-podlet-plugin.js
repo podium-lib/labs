@@ -4,20 +4,20 @@ import resolve from "./resolve.js";
 import { existsSync } from "node:fs";
 
 // plugins
-import assets from "../plugins/assets.js";
-import compression from "../plugins/compression.js";
-import dependencies from "../plugins/dependencies.js";
-import errors from "../plugins/errors.js";
-import exceptions from "../plugins/exceptions.js";
-import hydrate from "../plugins/hydrate.js";
-import importElement from "../plugins/import-element.js";
-import liveReload from "../plugins/live-reload.js";
+import assetsPn from "../plugins/assets.js";
+import compressionPn from "../plugins/compression.js";
+import dependenciesPn from "../plugins/dependencies.js";
+import errorsPn from "../plugins/errors.js";
+import exceptionsPn from "../plugins/exceptions.js";
+import hydratePn from "../plugins/hydrate.js";
+import importElementPn from "../plugins/import-element.js";
+import liveReloadPn from "../plugins/live-reload.js";
 import localePn from "../plugins/locale.js";
 import metricsPn from "../plugins/metrics.js";
 import podletPn from "../plugins/podlet.js";
-import script from "../plugins/script.js";
-import timing from "../plugins/timing.js";
-import validation from "../plugins/validation.js";
+import scriptPn from "../plugins/script.js";
+import timingPn from "../plugins/timing.js";
+import validationPn from "../plugins/validation.js";
 import lazyPn from "../plugins/lazy.js";
 import scriptsPn from "../plugins/scripts.js";
 import ssrPn from "../plugins/ssr.js";
@@ -62,32 +62,31 @@ const defaults = {
  * @typedef {import("fastify").FastifyContextConfig & { timing: boolean }} FastifyContextConfig
  */
 
-export default fp(async function (fastify, { config, cwd = process.cwd() }) {
-  const prefix = config.get("app.base") || "/";
-  const base = config.get("assets.base");
+export default fp(async function (fastify, { 
+  prefix = "/",
+  base = "/",
+  name = null,
+  pathname = "/",
+  manifest = "/manifest.json",
+  content = "/",
+  fallback = null,
+  development = false,
+  version = null,
+  locale = null,
+  plugins = [],
+  cwd = process.cwd(),
+  lazy = false,
+  scripts = false,
+  compression = true,
+  grace = 0,
+  timeAllRoutes = true,
+  groupStatusCodes = true,
+  mode = "hydrate",
+}) {
   const assetBase = isAbsoluteURL(base) ? base : joinURLPathSegments(prefix, base);
-  const name = config.get("app.name");
-  const development = config.get("app.development");
-  const version = config.get("podlet.version");
-  const locale = config.get("app.locale");
   const contentFilePath = await resolve(join(process.cwd(), "./content.js"));
   const fallbackFilePath = await resolve(join(process.cwd(), "./fallback.js"));
 
-  // read from build.js
-  const BUILD_FILEPATH = join(cwd, "build.js");
-
-  const plugins = [];
-  if (existsSync(BUILD_FILEPATH)) {
-    try {
-      const userDefinedBuild = (await import(BUILD_FILEPATH)).default;
-      const userDefinedPlugins = await userDefinedBuild({ config });
-      if (Array.isArray(userDefinedPlugins)) {
-        plugins.unshift(...userDefinedPlugins);
-      }
-    } catch (err) {
-      // noop
-    }
-  }
   let podlet;
   let metrics;
   /** @type {stateFunction} */
@@ -106,32 +105,32 @@ export default fp(async function (fastify, { config, cwd = process.cwd() }) {
       await f.register(podletPn, {
         name,
         version,
-        pathname: config.get("podlet.pathname"),
-        manifest: config.get("podlet.manifest"),
-        content: config.get("podlet.content"),
-        fallback: config.get("podlet.fallback"),
+        pathname,
+        manifest,
+        content,
+        fallback,
         development,
       });
-      await f.register(lazyPn, { enabled: config.get("assets.lazy"), base: assetBase });
-      await f.register(scriptsPn, { enabled: config.get("assets.scripts"), base: assetBase });
-      await f.register(liveReload, { development });
-      await f.register(compression, { enabled: config.get("app.compression") });
-      await f.register(assets, { base, cwd });
-      await f.register(dependencies, { enabled: development, cwd });
-      await f.register(errors);
-      await f.register(exceptions, { grace: config.get("app.grace") });
-      await f.register(hydrate, { appName: config.get("app.name"), base: assetBase, development });
-      await f.register(csrPn, { appName: config.get("app.name"), base: assetBase, development });
+      await f.register(lazyPn, { enabled: lazy, base: assetBase });
+      await f.register(scriptsPn, { enabled: scripts, base: assetBase });
+      await f.register(liveReloadPn, { development });
+      await f.register(compressionPn, { enabled: compression });
+      await f.register(assetsPn, { base, cwd });
+      await f.register(dependenciesPn, { enabled: development, cwd });
+      await f.register(errorsPn);
+      await f.register(exceptionsPn, { grace: grace });
+      await f.register(hydratePn, { appName: name, base: assetBase, development });
+      await f.register(csrPn, { appName: name, base: assetBase, development });
       await f.register(ssrPn);
-      await f.register(importElement, { appName: name, development, plugins, cwd });
+      await f.register(importElementPn, { appName: name, development, plugins, cwd });
       await f.register(localePn, { locale, cwd });
       await f.register(metricsPn);
-      await f.register(script, { development });
-      await f.register(timing, {
-        timeAllRoutes: config.get("metrics.timing.timeAllRoutes"),
-        groupStatusCodes: config.get("metrics.timing.groupStatusCodes"),
+      await f.register(scriptPn, { development });
+      await f.register(timingPn, {
+        timeAllRoutes,
+        groupStatusCodes,
       });
-      await f.register(validation, { prefix, defaults, mappings: { "/": "content.json" }, cwd });
+      await f.register(validationPn, { prefix, defaults, mappings: { "/": "content.json" }, cwd });
 
       // routes
 
@@ -140,7 +139,7 @@ export default fp(async function (fastify, { config, cwd = process.cwd() }) {
           const contextConfig = /** @type {FastifyContextConfig} */ (reply.context.config);
           contextConfig.timing = true;
 
-          if (config.get("app.mode") === "ssr-only" || config.get("app.mode") === "hydrate") {
+          if (mode === "ssr-only" || mode === "hydrate") {
             // import server side component
             await f.importElement(contentFilePath);
           }
@@ -153,19 +152,17 @@ export default fp(async function (fastify, { config, cwd = process.cwd() }) {
           const translations = f.translations ? ` translations='${JSON.stringify(f.translations)}'` : "";
           const template = `<${name}-content version="${version}" locale='${locale}'${translations} initial-state='${initialState}'></${name}-content>`;
           const hydrateSupport =
-            config.get("app.mode") === "ssr-only" || config.get("app.mode") === "hydrate"
+            mode === "ssr-only" || mode === "hydrate"
               ? f.script(`${prefix}/node_modules/lit/experimental-hydrate-support.js`, { dev: true })
               : "";
           const markup =
-            config.get("app.mode") === "ssr-only"
+            mode === "ssr-only"
               ? f.ssr(template)
-              : config.get("app.mode") === "csr-only"
+              : mode === "csr-only"
               ? f.csr("content", template)
               : f.hydrate("content", template);
 
           reply.type("text/html; charset=utf-8").send(`${hydrateSupport}${markup}`);
-
-          // TODO: Wire up CSR and SSR Only
 
           return reply;
         });
@@ -176,7 +173,7 @@ export default fp(async function (fastify, { config, cwd = process.cwd() }) {
           const contextConfig = /** @type {FastifyContextConfig} */ (reply.context.config);
           contextConfig.timing = true;
 
-          if (config.get("app.mode") === "ssr-only" || config.get("app.mode") === "hydrate") {
+          if (mode === "ssr-only" || mode === "hydrate") {
             // import server side component
             await f.importElement(fallbackFilePath);
           }
@@ -189,13 +186,13 @@ export default fp(async function (fastify, { config, cwd = process.cwd() }) {
           const translations = f.translations ? ` translations='${JSON.stringify(f.translations)}'` : "";
           const template = `<${name}-fallback version="${version}" locale='${locale}'${translations} initial-state='${initialState}'></${name}-fallback>`;
           const hydrateSupport =
-            config.get("app.mode") === "ssr-only" || config.get("app.mode") === "hydrate"
+            mode === "ssr-only" || mode === "hydrate"
               ? f.script(`${prefix}/node_modules/lit/experimental-hydrate-support.js`, { dev: true })
               : "";
           const markup =
-            config.get("app.mode") === "ssr-only"
+            mode === "ssr-only"
               ? f.ssr(template)
-              : config.get("app.mode") === "csr-only"
+              : mode === "csr-only"
               ? f.csr("fallback", template)
               : f.hydrate("fallback", template);
 
@@ -234,7 +231,6 @@ export default fp(async function (fastify, { config, cwd = process.cwd() }) {
 
   fastify.decorate("setContentState", setContentState);
   fastify.decorate("setFallbackState", setFallbackState);
-  fastify.decorate("config", config);
   fastify.decorate("podlet", podlet);
   fastify.decorate("metrics", metrics);
 });
