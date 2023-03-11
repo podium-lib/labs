@@ -1,5 +1,5 @@
 {
-  "name": "@podium/experimental-fastify-podlet-server",
+  "name": "@podium/podlet-server",
   "version": "0.0.10",
   "type": "module",
   "bin": {
