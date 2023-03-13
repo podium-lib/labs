@@ -1,0 +1,17 @@
+{
+  "name": "podlet-simple",
+  "type": "module",
+  "version": "1.0.0",
+  "main": "content.js",
+  "scripts": {
+    "build": "podlet build",
+    "start": "podlet start",
+    "dev": "podlet dev"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@podium/experimental-fastify-podlet-server": "0.0.10",
+    "@podium/experimental-podium-element": "0.0.4",
+    "lit": "2.6.1"
+  }
+}
