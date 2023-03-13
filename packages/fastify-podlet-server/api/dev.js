@@ -9,6 +9,10 @@ import httpError from "http-errors";
 import fastifyPodletPlugin from "../lib/plugin.js";
 import resolve from "../lib/resolve.js";
 
+const joinURLPathSegments = (...segments) => {
+  return segments.join("/").replace(/[\/]+/g, "/");
+};
+
 export async function dev({ config, cwd = process.cwd() }) {
   config.set("assets.development", true);
 
@@ -31,9 +35,12 @@ export async function dev({ config, cwd = process.cwd() }) {
   const SERVER_FILEPATH = await resolve(join(cwd, "server.js"));
   const BUILD_FILEPATH = await resolve(join(cwd, "build.js"));
 
+  let contentFileExists = false;
+
   const entryPoints = [];
   if (existsSync(CONTENT_FILEPATH)) {
     entryPoints.push(CONTENT_FILEPATH);
+    contentFileExists = true;
   }
   if (existsSync(FALLBACK_FILEPATH)) {
     entryPoints.push(FALLBACK_FILEPATH);
@@ -96,9 +103,17 @@ export async function dev({ config, cwd = process.cwd() }) {
     logger: LOGGER,
     // @ts-ignore
     app: (app, opts, done) => {
-      if (config.get("app.base") !== "/") {
+      // if no content file yet defined, redirect to manifest file
+      if (!contentFileExists) {
         app.get("/", (request, reply) => {
-          reply.redirect(config.get("app.base"));
+          reply.redirect(join(config.get("app.base"), config.get("podlet.manifest")));
+        });
+      }
+
+      // if content file is defined, and content url doesn't resolve to /, redirect to content route
+      if (joinURLPathSegments(config.get("app.base"), config.get("podlet.content")) !== "/" && contentFileExists) {
+        app.get("/", (request, reply) => {
+          reply.redirect(join(config.get("app.base"), config.get("podlet.content")));
         });
       }
 
