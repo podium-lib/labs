@@ -5,6 +5,49 @@ import fp from "fastify-plugin";
 
 const require = createRequire(import.meta.url);
 
+/**
+ * Flag used in proxy to decide whether to intercept calls to
+ * customElements.define() or not.
+ *
+ * We switch this on, collect up registrations then we switch it off
+ * and call it manually ourselves
+ */
+let interceptDefineCalls = true;
+const definitions = new Map();
+
+/**
+ * Create a proxy to intercept calls to customElements.define.
+ *
+ * customElements.define may be called in userland as they import different component depenedencies and if they do so,
+ * each time we do a hot/live reload of code, we will redefine the same components again which will throw.
+ * In order to solve this, we collect up the arguments using the proxy defined below and store them in a map called "definitions"
+ * and then once we are ready, we wipe the registry from before code change and then define all components again manually.
+ *
+ * We cannot simply wipe the registry and let things occur organically or else we get race conditions due to the delay between
+ * wiping the registry and the time it takes to import the bundle (which contains define calls). Hence, we intercept the define calls,
+ * store the args in "definitions" and then once everything has settled we do the registry wipe and redefine in one go.
+ */
+// @ts-ignore
+const proxy = new Proxy(customElements, {
+  get(target, prop) {
+    // this first bit just replicates the normal behavior when we don't intercept
+    let ret = Reflect.get(target, prop);
+    if (typeof ret === "function") {
+      ret = ret.bind(target);
+    }
+    // if the prop being accessed is define, and the variable "collecting" is currently true
+    // we intercept the define call and return a function that collects args in the "definitions" map.
+    if (prop === "define" && interceptDefineCalls) {
+      return (name, ctor) => definitions.set(name, ctor);
+    }
+
+    // in all other cases, including if collecting is false, we just return default behaviour for define.
+    return ret;
+  },
+});
+// we then overwrite the custom elements object with our proxy to allow interception.
+customElements = proxy;
+
 export default fp(async function importElement(
   fastify,
   { appName = "", development = false, plugins = [], cwd = process.cwd() }
@@ -13,21 +56,6 @@ export default fp(async function importElement(
   await import("@lit-labs/ssr");
   const outdir = join(cwd, "dist", "server");
 
-  // support user defined plugins via a build.js file
-  // const BUILD_FILEPATH = join(cwd, "build.js");
-
-  // const plugins = [];
-  // if (existsSync(BUILD_FILEPATH)) {
-  //   try {
-  //     const userDefinedBuild = (await import(BUILD_FILEPATH)).default;
-  //     const userDefinedPlugins = await userDefinedBuild({ config });
-  //     if (Array.isArray(userDefinedPlugins)) {
-  //       plugins.unshift(...userDefinedPlugins);
-  //     }
-  //   } catch (err) {
-  //     // noop
-  //   }
-  // }
   /**
    * Imports a custom element by pathname, bundles it and registers it in the server side custom element
    * registry.
@@ -39,7 +67,9 @@ export default fp(async function importElement(
     const { name } = parse(path);
 
     if (!name || name === ".") {
-      throw new Error(`Invalid path '${path}' given to importElement. path must be a path (relative or absolute) to a file including filename and extension.`);
+      throw new Error(
+        `Invalid path '${path}' given to importElement. path must be a path (relative or absolute) to a file including filename and extension.`
+      );
     }
 
     const outfile = join(outdir, `${name}.js`);
@@ -67,7 +97,7 @@ export default fp(async function importElement(
         bundle: true,
         format: "esm",
         outfile,
-        minify: true,
+        minify: !development,
         plugins,
         legalComments: `none`,
         sourcemap: development ? "inline" : false,
@@ -89,12 +119,12 @@ export default fp(async function importElement(
       if (!development) throw err;
     }
 
+    interceptDefineCalls = false;
+
     // if already defined from a previous request, delete from registry
     try {
-      if (customElements.get(`${appName}-${name}`)) {
-        // @ts-ignore
-        customElements.__definitions.delete(`${appName}-${name}`);
-      }
+      // @ts-ignore
+      customElements.__definitions.clear();
     } catch (err) {
       fastify.log.error(err);
       if (!development) throw err;
@@ -102,6 +132,11 @@ export default fp(async function importElement(
 
     // define newly imported custom element in the registry
     try {
+      for (const [name, ctor] of definitions.entries()) {
+        customElements.define(name, ctor);
+      }
+      definitions.clear();
+      interceptDefineCalls = true;
       customElements.define(`${appName}-${name}`, Element);
     } catch (err) {
       fastify.log.error(err);
