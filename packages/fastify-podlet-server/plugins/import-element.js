@@ -6,47 +6,30 @@ import fp from "fastify-plugin";
 const require = createRequire(import.meta.url);
 
 /**
- * Flag used in proxy to decide whether to intercept calls to
- * customElements.define() or not.
- *
- * We switch this on, collect up registrations then we switch it off
- * and call it manually ourselves
+ * Replace the CustomElementRegistry shim used by lit server side with one that allows us to update
+ * component definitions in dev without errors being thrown. In prod, we keep the definition check.
  */
-let interceptDefineCalls = true;
-const definitions = new Map();
-
-/**
- * Create a proxy to intercept calls to customElements.define.
- *
- * customElements.define may be called in userland as they import different component depenedencies and if they do so,
- * each time we do a hot/live reload of code, we will redefine the same components again which will throw.
- * In order to solve this, we collect up the arguments using the proxy defined below and store them in a map called "definitions"
- * and then once we are ready, we wipe the registry from before code change and then define all components again manually.
- *
- * We cannot simply wipe the registry and let things occur organically or else we get race conditions due to the delay between
- * wiping the registry and the time it takes to import the bundle (which contains define calls). Hence, we intercept the define calls,
- * store the args in "definitions" and then once everything has settled we do the registry wipe and redefine in one go.
- */
-// @ts-ignore
-const proxy = new Proxy(customElements, {
-  get(target, prop) {
-    // this first bit just replicates the normal behavior when we don't intercept
-    let ret = Reflect.get(target, prop);
-    if (typeof ret === "function") {
-      ret = ret.bind(target);
+class CustomElementRegistry {
+  constructor(development = false) {
+    this.__definitions = new Map();
+    this.development = development;
+  }
+  define(name, ctor) {
+    // we turn off this check for development mode to allow us to replace existing definitions each time
+    // a file changes on disk.
+    if (!this.development && this.__definitions.has(name)) {
+      throw new Error(
+        `Failed to execute 'define' on 'CustomElementRegistry': ` +
+          `the name "${name}" has already been used with this registry`
+      );
     }
-    // if the prop being accessed is define, and the variable "collecting" is currently true
-    // we intercept the define call and return a function that collects args in the "definitions" map.
-    if (prop === "define" && interceptDefineCalls) {
-      return (name, ctor) => definitions.set(name, ctor);
-    }
-
-    // in all other cases, including if collecting is false, we just return default behaviour for define.
-    return ret;
-  },
-});
-// we then overwrite the custom elements object with our proxy to allow interception.
-customElements = proxy;
+    this.__definitions.set(name, { ctor, observedAttributes: ctor.observedAttributes ?? [] });
+  }
+  get(name) {
+    const definition = this.__definitions.get(name);
+    return definition?.ctor;
+  }
+}
 
 export default fp(async function importElement(
   fastify,
@@ -55,6 +38,10 @@ export default fp(async function importElement(
   // ensure custom elements registry has been enabled
   await import("@lit-labs/ssr");
   const outdir = join(cwd, "dist", "server");
+
+  // replace customElement shim with our own creation that allows for redefines when in development mode.
+  // @ts-ignore
+  customElements = new CustomElementRegistry(development);
 
   /**
    * Imports a custom element by pathname, bundles it and registers it in the server side custom element
@@ -119,24 +106,8 @@ export default fp(async function importElement(
       if (!development) throw err;
     }
 
-    interceptDefineCalls = false;
-
-    // if already defined from a previous request, delete from registry
-    try {
-      // @ts-ignore
-      customElements.__definitions.clear();
-    } catch (err) {
-      fastify.log.error(err);
-      if (!development) throw err;
-    }
-
     // define newly imported custom element in the registry
     try {
-      for (const [name, ctor] of definitions.entries()) {
-        customElements.define(name, ctor);
-      }
-      definitions.clear();
-      interceptDefineCalls = true;
       customElements.define(`${appName}-${name}`, Element);
     } catch (err) {
       fastify.log.error(err);
