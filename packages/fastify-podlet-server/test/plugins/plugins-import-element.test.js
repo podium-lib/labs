@@ -21,31 +21,34 @@ test("invalid path given throws", async (t) => {
   const app = fastify({ logger: false });
   await app.register(plugin, { appName: "test-app", cwd: tmp });
   try {
-      // @ts-ignore
+    // @ts-ignore
     await app.importElement("");
-  } catch(err) {
-      t.match(
-        err.message, "Invalid path '' given to importElement",
-        "customElement registry should contain test-app-element"
-      );
+  } catch (err) {
+    t.match(
+      err.message,
+      "Invalid path '' given to importElement",
+      "customElement registry should contain test-app-element"
+    );
   }
   try {
-      // @ts-ignore
+    // @ts-ignore
     await app.importElement("./");
-  } catch(err) {
-      t.match(
-        err.message, "Invalid path './' given to importElement",
-        "customElement registry should contain test-app-element"
-      );
+  } catch (err) {
+    t.match(
+      err.message,
+      "Invalid path './' given to importElement",
+      "customElement registry should contain test-app-element"
+    );
   }
   try {
-      // @ts-ignore
+    // @ts-ignore
     await app.importElement("/");
-  } catch(err) {
-      t.match(
-        err.message, "Invalid path '/' given to importElement",
-        "customElement registry should contain test-app-element"
-      );
+  } catch (err) {
+    t.match(
+      err.message,
+      "Invalid path '/' given to importElement",
+      "customElement registry should contain test-app-element"
+    );
   }
 });
 
@@ -113,4 +116,41 @@ test("throws if filepath given does not exist", async (t) => {
   } catch (err) {
     t.match(err.message, `Cannot find module './does-not-exist.js'`, "should match expected error message");
   }
+});
+
+test("successful server side rendering when dependent components used", async (t) => {
+  const app = fastify({ logger: false });
+  await app.register(plugin, { appName: "test-app", cwd: tmp, development: true });
+  await writeFile(
+    join(tmp, "element-with-dep.js"),
+    `class DependentElement {static get replaced() {return false;}}
+    customElements.define('dependent-component', DependentElement);
+    export default class OriginalElement {static get replaced() {return false;}}`
+  );
+  // @ts-ignore
+  await app.importElement("./element-with-dep.js");
+  t.equal(
+    // @ts-ignore
+    customElements.__definitions.has("test-app-element-with-dep"),
+    true,
+    "customElement registry should contain test-app-element-with-dep"
+  );
+  t.equal(
+    // @ts-ignore
+    customElements.__definitions.has("dependent-component"),
+    true,
+    "customElement registry should contain dependent-component"
+  );
+  await writeFile(
+    join(tmp, "element-with-dep.js"),
+    `class DependentElement {static get replaced() {return true;}}
+    customElements.define('dependent-component', DependentElement);
+    export default class DifferentElement {static get replaced() {return true;}}`
+  );
+  // @ts-ignore
+  await app.importElement("./element-with-dep.js");
+  // @ts-ignore
+  t.equal(customElements.__definitions.get("test-app-element-with-dep").ctor.replaced, true);
+  // @ts-ignore
+  t.equal(customElements.__definitions.get("dependent-component").ctor.replaced, true);
 });

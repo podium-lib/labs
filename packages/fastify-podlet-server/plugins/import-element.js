@@ -5,6 +5,32 @@ import fp from "fastify-plugin";
 
 const require = createRequire(import.meta.url);
 
+/**
+ * Replace the CustomElementRegistry shim used by lit server side with one that allows us to update
+ * component definitions in dev without errors being thrown. In prod, we keep the definition check.
+ */
+class CustomElementRegistry {
+  constructor(development = false) {
+    this.__definitions = new Map();
+    this.development = development;
+  }
+  define(name, ctor) {
+    // we turn off this check for development mode to allow us to replace existing definitions each time
+    // a file changes on disk.
+    if (!this.development && this.__definitions.has(name)) {
+      throw new Error(
+        `Failed to execute 'define' on 'CustomElementRegistry': ` +
+          `the name "${name}" has already been used with this registry`
+      );
+    }
+    this.__definitions.set(name, { ctor, observedAttributes: ctor.observedAttributes ?? [] });
+  }
+  get(name) {
+    const definition = this.__definitions.get(name);
+    return definition?.ctor;
+  }
+}
+
 export default fp(async function importElement(
   fastify,
   { appName = "", development = false, plugins = [], cwd = process.cwd() }
@@ -13,21 +39,10 @@ export default fp(async function importElement(
   await import("@lit-labs/ssr");
   const outdir = join(cwd, "dist", "server");
 
-  // support user defined plugins via a build.js file
-  // const BUILD_FILEPATH = join(cwd, "build.js");
+  // replace customElement shim with our own creation that allows for redefines when in development mode.
+  // @ts-ignore
+  customElements = new CustomElementRegistry(development);
 
-  // const plugins = [];
-  // if (existsSync(BUILD_FILEPATH)) {
-  //   try {
-  //     const userDefinedBuild = (await import(BUILD_FILEPATH)).default;
-  //     const userDefinedPlugins = await userDefinedBuild({ config });
-  //     if (Array.isArray(userDefinedPlugins)) {
-  //       plugins.unshift(...userDefinedPlugins);
-  //     }
-  //   } catch (err) {
-  //     // noop
-  //   }
-  // }
   /**
    * Imports a custom element by pathname, bundles it and registers it in the server side custom element
    * registry.
@@ -39,7 +54,9 @@ export default fp(async function importElement(
     const { name } = parse(path);
 
     if (!name || name === ".") {
-      throw new Error(`Invalid path '${path}' given to importElement. path must be a path (relative or absolute) to a file including filename and extension.`);
+      throw new Error(
+        `Invalid path '${path}' given to importElement. path must be a path (relative or absolute) to a file including filename and extension.`
+      );
     }
 
     const outfile = join(outdir, `${name}.js`);
@@ -67,7 +84,7 @@ export default fp(async function importElement(
         bundle: true,
         format: "esm",
         outfile,
-        minify: true,
+        minify: !development,
         plugins,
         legalComments: `none`,
         sourcemap: development ? "inline" : false,
@@ -84,17 +101,6 @@ export default fp(async function importElement(
     let Element;
     try {
       Element = (await import(`${outfile}?s=${Date.now()}`)).default;
-    } catch (err) {
-      fastify.log.error(err);
-      if (!development) throw err;
-    }
-
-    // if already defined from a previous request, delete from registry
-    try {
-      if (customElements.get(`${appName}-${name}`)) {
-        // @ts-ignore
-        customElements.__definitions.delete(`${appName}-${name}`);
-      }
     } catch (err) {
       fastify.log.error(err);
       if (!development) throw err;

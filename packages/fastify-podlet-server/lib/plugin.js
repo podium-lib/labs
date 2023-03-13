@@ -62,27 +62,30 @@ const defaults = {
  * @typedef {import("fastify").FastifyContextConfig & { timing: boolean }} FastifyContextConfig
  */
 
-export default fp(async function (fastify, { 
-  prefix = "/",
-  base = "/",
-  name = null,
-  pathname = "/",
-  manifest = "/manifest.json",
-  content = "/",
-  fallback = "",
-  development = false,
-  version = null,
-  locale = "",
-  plugins = [],
-  cwd = process.cwd(),
-  lazy = false,
-  scripts = false,
-  compression = true,
-  grace = 0,
-  timeAllRoutes = true,
-  groupStatusCodes = true,
-  mode = "hydrate",
-}) {
+export default fp(async function (
+  fastify,
+  {
+    prefix = "/",
+    base = "/",
+    name = null,
+    pathname = "/",
+    manifest = "/manifest.json",
+    content = "/",
+    fallback = "",
+    development = false,
+    version = null,
+    locale = "",
+    plugins = [],
+    cwd = process.cwd(),
+    lazy = false,
+    scripts = false,
+    compression = true,
+    grace = 0,
+    timeAllRoutes = true,
+    groupStatusCodes = true,
+    mode = "hydrate",
+  }
+) {
   const assetBase = isAbsoluteURL(base) ? base : joinURLPathSegments(prefix, base);
   const contentFilePath = await resolve(join(cwd, "./content.js"));
   const fallbackFilePath = await resolve(join(cwd, "./fallback.js"));
@@ -152,7 +155,7 @@ export default fp(async function (fastify, {
           const translations = f.translations ? ` translations='${JSON.stringify(f.translations)}'` : "";
           const template = `<${name}-content version="${version}" locale='${locale}'${translations} initial-state='${initialState}'></${name}-content>`;
           const hydrateSupport =
-            mode === "ssr-only" || mode === "hydrate"
+            mode === "hydrate"
               ? f.script(`${prefix}/node_modules/lit/experimental-hydrate-support.js`, { dev: true })
               : "";
           const markup =
@@ -186,7 +189,7 @@ export default fp(async function (fastify, {
           const translations = f.translations ? ` translations='${JSON.stringify(f.translations)}'` : "";
           const template = `<${name}-fallback version="${version}" locale='${locale}'${translations} initial-state='${initialState}'></${name}-fallback>`;
           const hydrateSupport =
-            mode === "ssr-only" || mode === "hydrate"
+            mode === "hydrate"
               ? f.script(`${prefix}/node_modules/lit/experimental-hydrate-support.js`, { dev: true })
               : "";
           const markup =
