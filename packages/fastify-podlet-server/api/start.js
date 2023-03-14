@@ -1,21 +1,21 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import fastify from "fastify";
 import httpError from "http-errors";
 import fastifyPodletPlugin from "../lib/plugin.js";
+import PathResolver from "../lib/path.js";
 
 /**
  * @typedef {import("fastify").FastifyInstance & { podlet: import("@podium/podlet").default }} FastifyInstance
  */
 
 export async function start({ config, cwd = process.cwd() }) {
-  // read from build.js
-  const BUILD_FILEPATH = join(cwd, "build.js");
+  const resolver = new PathResolver({ cwd, development: config.get("app.development") });
+  const BUILD_FILEPATH = await resolver.resolve("./build");
+  const SERVER_FILEPATH = await resolver.resolve("./server");
 
   const plugins = [];
-  if (existsSync(BUILD_FILEPATH)) {
+  if (BUILD_FILEPATH.exists) {
     try {
-      const userDefinedBuild = (await import(BUILD_FILEPATH)).default;
+      const userDefinedBuild = (await resolver.import(BUILD_FILEPATH)).default;
       const userDefinedPlugins = await userDefinedBuild({ config });
       if (Array.isArray(userDefinedPlugins)) {
         plugins.unshift(...userDefinedPlugins);
@@ -52,10 +52,14 @@ export async function start({ config, cwd = process.cwd() }) {
   const { podlet } = app;
 
   // Load user server.js file if provided.
-  const serverFilePath = join(cwd, "server.js");
-  if (existsSync(serverFilePath)) {
-    const server = (await import(serverFilePath)).default;
-    app.register(server, { prefix: config.get("app.base"), logger: app.log, config, podlet, errors: httpError });
+  if (SERVER_FILEPATH.exists) {
+    app.register((await resolver.import(SERVER_FILEPATH)).default, {
+      prefix: config.get("app.base"),
+      logger: app.log,
+      config,
+      podlet,
+      errors: httpError,
+    });
   }
 
   try {
