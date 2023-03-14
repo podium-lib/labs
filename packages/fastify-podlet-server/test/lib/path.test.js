@@ -105,9 +105,16 @@ test("Import JavaScript file using a resolution object", async (t) => {
   t.equal(script, true);
 });
 
-test("Import TypeScript file using a path string", async (t) => {
+test("Import TypeScript file using a buildAndResolve resolution object", async (t) => {
   const resolver = new PathResolver({ cwd: tmp, development: false });
   const resolution = await resolver.buildAndResolve("./typescript.js");
+  const { script } = await resolver.import(resolution);
+  t.equal(script, true);
+});
+
+test("Import TypeScript file using a resolution object", async (t) => {
+  const resolver = new PathResolver({ cwd: tmp, development: false });
+  const resolution = await resolver.resolve("./typescript.js");
   const { script } = await resolver.import(resolution);
   t.equal(script, true);
 });

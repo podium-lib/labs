@@ -120,6 +120,9 @@ export default class FileUtilities {
       resolution = await this.buildAndResolve(path);
     } else {
       resolution = /** @type {Resolution} */(path);
+      if (resolution.typescript) {
+        resolution = await this.buildAndResolve(resolution.originalPath);
+      }
     }
     if (resolution.exists) return import(resolution.path);
     throw new Error(`Unable to import file at path ${resolution.path}. File does not exist.`)
