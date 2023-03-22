@@ -1,5 +1,5 @@
 {
-  "name": "podlet-simple",
+  "name": "podlet-timer",
   "type": "module",
   "version": "1.0.0",
   "main": "content.js",
@@ -10,7 +10,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@podium/experimental-fastify-podlet-server": "0.0.10",
+    "@podium/podlet-server": "0.0.13",
     "@podium/experimental-podium-element": "0.0.4",
     "lit": "2.6.1"
   }

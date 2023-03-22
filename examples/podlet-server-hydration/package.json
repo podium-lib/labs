@@ -10,7 +10,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@podium/experimental-fastify-podlet-server": "0.0.10",
+    "@podium/podlet-server": "0.0.13",
     "@podium/experimental-podium-element": "0.0.4"
   }
 }

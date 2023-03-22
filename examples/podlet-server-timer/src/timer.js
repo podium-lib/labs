@@ -1,7 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import {play, pause, replay} from './icons.js';
 
-export class Timer extends LitElement {
+export default class Timer extends LitElement {
   static properties = {
     duration: {},
     end: {state: true},
