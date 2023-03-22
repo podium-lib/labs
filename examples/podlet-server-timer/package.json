@@ -11,7 +11,7 @@
   "license": "MIT",
   "dependencies": {
     "@podium/podlet-server": "0.0.13",
-    "@podium/experimental-podium-element": "0.0.4",
+    "@podium/element": "0.0.1",
     "lit": "2.6.1"
   }
 }
