@@ -1,12 +1,12 @@
 import { html, css } from "lit";
 import { PodiumElement } from "@podium/experimental-podium-element";
 
-import timer from './src/timer.js'
+import "./src/timer.js";
 
 export default class Content extends PodiumElement {
   static styles = css`
     :host {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: "JetBrains Mono", monospace;
       font-size: 36px;
     }
   `;

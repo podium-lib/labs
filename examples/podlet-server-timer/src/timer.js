@@ -1,14 +1,13 @@
-import { LitElement, html, css } from 'lit';
-import {play, pause, replay} from './icons.js';
+import { LitElement, html, css } from "lit";
+import { play, pause, replay } from "./icons.js";
 
 export default class Timer extends LitElement {
   static properties = {
     duration: {},
-    end: {state: true},
-    remaining: {state: true},
+    end: { state: true },
+    remaining: { state: true },
   };
   static styles = css`
-
     :host {
       display: inline-block;
       min-width: 4em;
@@ -20,7 +19,7 @@ export default class Timer extends LitElement {
       user-select: none;
       font-size: 0.6em;
     }
-    `;
+  `;
 
   constructor() {
     super();
@@ -30,25 +29,22 @@ export default class Timer extends LitElement {
   }
 
   render() {
-    const {remaining, running} = this;
+    const { remaining, running } = this;
     const min = Math.floor(remaining / 60000);
     const sec = pad(min, Math.floor((remaining / 1000) % 60));
     const hun = pad(true, Math.floor((remaining % 1000) / 10));
     return html`
       ${min ? `${min}:${sec}` : `${sec}.${hun}`}
       <footer>
-        ${
-          remaining === 0
-            ? ''
-            : running
-            ? html`<span @click=${this.pause}>${pause}</span>`
-            : html`<span @click=${this.start}>${play}</span>`
-        }
+        ${remaining === 0
+          ? ""
+          : running
+          ? html`<span @click=${this.pause}>${pause}</span>`
+          : html`<span @click=${this.start}>${play}</span>`}
         <span @click=${this.reset}>${replay}</span>
       </footer>
     `;
   }
-  
 
   start() {
     this.end = Date.now() + this.remaining;
@@ -76,14 +72,15 @@ export default class Timer extends LitElement {
     return this.end && this.remaining;
   }
 
-  connectedCallback() {
-    super.connectedCallback();
-    this.reset();
-  } 
+  updated() {
+    if (!this.hydrated) {
+        this.reset();
+        this.hydrated = true;
+    }
+  }
 }
-customElements.define('lit-timer', Timer);
-
+customElements.define("lit-timer", Timer);
 
 function pad(pad, val) {
-  return pad ? String(val).padStart(2, '0') : val;
-} 
+  return pad ? String(val).padStart(2, "0") : val;
+}
